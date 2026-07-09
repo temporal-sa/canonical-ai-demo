@@ -14,8 +14,8 @@ class ToolCall(BaseModel):
 class ChatMessage(BaseModel):
     role: Role
     content: str = ""
-    tool_calls: list[ToolCall] = Field(default_factory=list)  # on role="assistant"
-    tool_call_id: str | None = None  # on role="tool"
+    tool_calls: list[ToolCall] = Field(default_factory=list) 
+    tool_call_id: str | None = None 
 
 
 class LLMRequest(BaseModel):
@@ -23,7 +23,7 @@ class LLMRequest(BaseModel):
 
 
 class LLMResponse(BaseModel):
-    message: ChatMessage  # role="assistant"; tool_calls empty → final answer
+    message: ChatMessage 
 
 
 class ToolRequest(BaseModel):

@@ -1,5 +1,5 @@
 // Chat UI for the durable support agent. Vanilla JS, no build step.
-// Talks to whichever gateway BACKEND_URL points at (see config.js + API_CONTRACT.md).
+// Talks to whichever gateway BACKEND_URL points at (see config.js).
 
 const API = window.BACKEND_URL;
 const $ = (id) => document.getElementById(id);
@@ -178,6 +178,23 @@ async function pollUntilSettled(baselineAssistant) {
   showError('Timed out waiting for the agent — check the worker.');
 }
 
+// ── lazily start the workflow on the first message ──────────────────────────
+// No sign-in step: the customer identity comes from the auth gate (cloud) or a
+// default (local), resolved server-side. First send creates the conversation.
+async function ensureConversation() {
+  if (conversationId) return;
+  const { conversationId: id } = await call('POST', '/conversations', {});
+  conversationId = id;
+  // clickable workflow ID → opens this conversation's workflow in the Temporal UI
+  const link = document.createElement('a');
+  link.href = `${window.TEMPORAL_UI_BASE}/workflows/${encodeURIComponent(id)}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.innerHTML = '<span class="label">workflowId:&nbsp;</span>';
+  link.append(id);
+  $('conv-id').replaceChildren(link);
+}
+
 // ── send a message (blocks until the turn settles — see contract) ───────────
 $('composer').onsubmit = async (e) => {
   e.preventDefault();
@@ -187,6 +204,7 @@ $('composer').onsubmit = async (e) => {
   addMsg('user', text);
   setBusy(true);
   try {
+    await ensureConversation();
     const r = await call('POST', `/conversations/${conversationId}/messages`, { text });
     setBusy(false);
     if (r.reply) addMsg('assistant', r.reply);
@@ -200,27 +218,42 @@ $('composer').onsubmit = async (e) => {
   }
 };
 
-// ── start a conversation (starts the workflow) ──────────────────────────────
-$('start-form').onsubmit = async (e) => {
-  e.preventDefault();
+// ── API status panel (uptime-style) — the LLM kill-switch for THIS conversation ─
+// Provider/model come from config.js (the gateway's env); the outage flag is
+// per-conversation, so flipping it only affects your own session.
+let llmDown = false;
+
+function renderStatus(down) {
+  llmDown = !!down;
+  $('api-status').className = llmDown ? 'down' : 'ok';
+  $('as-provider').textContent =
+    { anthropic: 'Anthropic API', openai: 'OpenAI API' }[window.LLM_PROVIDER] || 'LLM API';
+  $('as-state').textContent = llmDown ? 'Major outage' : 'Operational';
+  $('as-model').textContent = window.LLM_MODEL || '';
+}
+
+async function refreshStatus() {
+  if (!conversationId) return renderStatus(false);  // no session yet → operational
   try {
-    const { conversationId: id } = await call('POST', '/conversations', {
-      customerEmail: $('email').value.trim(),
-    });
-    conversationId = id;
-    // clickable workflow ID → opens this conversation's workflow in the Temporal UI
-    const link = document.createElement('a');
-    link.href = `${window.TEMPORAL_UI_BASE}/workflows/${encodeURIComponent(id)}`;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.innerHTML = '<span class="label">workflowId:&nbsp;</span>';
-    link.append(id);
-    $('conv-id').replaceChildren(link);
-    $('start').remove();
-    setBusy(false);
-    // client-side greeting only — not part of the server transcript, so not counted
-    addMsg('assistant', 'Hi! I can help you find music, check your orders, or buy tracks. What are you looking for?', { counted: false });
-  } catch (err) {
-    showError(err.message);
-  }
+    const { down } = await call('GET', `/conversations/${conversationId}/llm-status`);
+    renderStatus(down);
+  } catch { /* ignore transient errors */ }
+}
+
+$('api-status').onclick = async () => {
+  try {
+    await ensureConversation();  // the switch is scoped to a conversation, so start one
+    const { down } = await call('POST', `/conversations/${conversationId}/llm-status`,
+                                { down: !llmDown });
+    renderStatus(down);
+  } catch (err) { showError(err.message); }
 };
+
+renderStatus(false);
+setInterval(refreshStatus, 5000);  // keep the panel live
+
+// ── on load ──────────────────────────────────────────────────────────────────
+addMsg('assistant',
+  'Hi! I can help you find music, check your orders, or buy tracks. What are you looking for?',
+  { counted: false });  // client-side greeting; not part of the server transcript
+$('input').focus();

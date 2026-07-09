@@ -17,12 +17,21 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 import config
+from . import control
 from models.types import ChatMessage, LLMRequest, LLMResponse, ToolCall
 from prompts import TOOLS
 
 
 @activity.defn
-async def call_llm(req: LLMRequest) -> LLMResponse: 
+async def call_llm(req: LLMRequest) -> LLMResponse:
+    # Demo kill-switch (the UI "API status" panel). While flipped to 'down',
+    # raise a RETRYABLE error → Temporal retries with backoff until it's flipped
+    # back, and the retries show in the history. This is the AI beat: LLM APIs
+    # are flaky/rate-limited, and the loop rides it out with no extra code.
+    if await control.llm_down():
+        raise ApplicationError(
+            "LLM provider is unavailable (simulated outage).", type="LLMProviderDown"
+        )
     if config.LLM_PROVIDER == "openai":
         return await _call_openai(req)
     return await _call_anthropic(req)
@@ -64,7 +73,7 @@ async def _call_anthropic(req: LLMRequest) -> LLMResponse:
         )
     except (anthropic.BadRequestError, anthropic.AuthenticationError,
             anthropic.PermissionDeniedError, anthropic.NotFoundError) as e:
-        raise ApplicationError(f"LLM request rejected: {e}", non_retryable=True) from e
+        raise ApplicationError(f"LLM request rejected: {e}", type="LLMFatalError", non_retryable=True) from e
 
     text = "".join(b.text for b in resp.content if b.type == "text")
     calls = [ToolCall(id=b.id, name=b.name, args=b.input)
@@ -102,7 +111,7 @@ async def _call_openai(req: LLMRequest) -> LLMResponse:
         )
     except (openai.BadRequestError, openai.AuthenticationError,
             openai.PermissionDeniedError, openai.NotFoundError) as e:
-        raise ApplicationError(f"LLM request rejected: {e}", non_retryable=True) from e
+        raise ApplicationError(f"LLM request rejected: {e}", type="LLMFatalError", non_retryable=True) from e
 
     choice = resp.choices[0].message
     calls = [ToolCall(id=c.id, name=c.function.name, args=json.loads(c.function.arguments))

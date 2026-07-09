@@ -1,0 +1,102 @@
+# DemoProject CR for the tmprl-demo-cloud-registry platform.
+#
+# This file does NOT live here at deploy time — copy it into the registry repo
+# at  projects/demo/canonical-ai-demo.yaml  and open a PR. Flux + the platform
+# operator do the rest (CodeBuild → ECR, Temporal Cloud namespace, Deployments,
+# ExternalSecrets, Traefik route). See deploy/README.md for prerequisites.
+apiVersion: registry.tmprl-demo.cloud/v1alpha1
+kind: DemoProject
+metadata:
+  name: canonical-ai-demo
+spec:
+  source:
+    # Push this repo here first (must be a temporal-sa GitHub repo).
+    repo: https://github.com/temporal-sa/canonical-ai-demo
+
+  builds:
+    app:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    worker:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    chinook-postgres:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
+
+  components:
+    # Chinook Postgres — internal only, single pod, ephemeral (self-seeds).
+    postgres:
+      build: chinook-postgres
+      replicas: 1
+      ports:
+        - name: db
+          containerPort: 5432
+          servicePort: 5432
+      env:
+        - name: POSTGRES_USER
+          valueFrom:
+            inputRef: secrets.db-creds.POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            inputRef: secrets.db-creds.POSTGRES_PASSWORD
+
+    # Worker — runs the loop + activities (LLM + tools + DB). Needs Temporal,
+    # the Anthropic key, and DB creds. `worker: true` wires Temporal Cloud auth.
+    worker:
+      build: worker
+      worker: true
+      secrets:
+        - anthropic-credentials   # injects ANTHROPIC_API_KEY as env
+      env:
+        - name: LLM_PROVIDER
+          value: anthropic
+        - name: DB_HOST
+          value: postgres          # in-namespace service DNS
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: chinook
+        - name: DB_USER
+          valueFrom:
+            inputRef: secrets.db-creds.POSTGRES_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            inputRef: secrets.db-creds.POSTGRES_PASSWORD
+
+    # App — gateway + web UI, same origin. `temporalAccess: true` wires a
+    # Temporal Cloud client. No DB/LLM here (all data + LLM work is on the worker).
+    app:
+      build: app
+      temporalAccess: true
+      ports:
+        - name: http
+          containerPort: 8000
+          servicePort: 80
+
+  secrets:
+    # Pre-create these in AWS Secrets Manager (see deploy/README.md):
+    #   tmprl-dem-cld/canonical-ai-demo/anthropic-credentials  {"ANTHROPIC_API_KEY": "..."}
+    #   tmprl-dem-cld/canonical-ai-demo/db-creds               {"POSTGRES_USER": "...", "POSTGRES_PASSWORD": "..."}
+    anthropic-credentials:
+      requiredProperties:
+        - ANTHROPIC_API_KEY
+    db-creds:
+      requiredProperties:
+        - POSTGRES_USER
+        - POSTGRES_PASSWORD
+
+  ingress:
+    subdomain: canonical-ai-demo          # → https://canonical-ai-demo.tmprl-demo.cloud
+    temporalAuthRequired: true            # Google/Gmail OAuth gate — protects the LLM token
+    component: app
+    port: http
+
+  registry:
+    title: Canonical AI Demo — Durable Support Agent
+    summary: >-
+      The canonical 100-level agentic demo. A single-agent ReAct loop on Temporal
+      over the Chinook music store: LLM + tools as activities, human-in-the-loop
+      purchase approval via signal, crash-recoverable, replay-safe.
+    tags: [AI, Agents, Workflows, Single-Agent]
+    temporalSdks: [Python]

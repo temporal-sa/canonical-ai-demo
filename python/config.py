@@ -18,13 +18,30 @@ TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
 TEMPORAL_TLS_CERT = os.getenv("TEMPORAL_TLS_CERT")
 TEMPORAL_TLS_KEY = os.getenv("TEMPORAL_TLS_KEY")
 
-# Database — docker compose up -d (local) or an in-cluster Service (EKS).
-DB_URL = os.getenv("DB_URL", "postgresql://demo:demo@localhost:5432/chinook")
+# Database — a full DB_URL (local `docker compose`) OR discrete DB_* parts
+# (EKS: the platform injects DB_HOST + a DB_PASSWORD secret, so we compose it —
+# a password can't be interpolated into a single URL env var via a secret ref).
+def _db_url() -> str:
+    if url := os.getenv("DB_URL"):
+        return url
+    if host := os.getenv("DB_HOST"):
+        user = os.getenv("DB_USER", "demo")
+        pw = os.getenv("DB_PASSWORD", "demo")
+        port = os.getenv("DB_PORT", "5432")
+        name = os.getenv("DB_NAME", "chinook")
+        return f"postgresql://{user}:{pw}@{host}:{port}/{name}"
+    return "postgresql://demo:demo@localhost:5432/chinook"
+
+
+DB_URL = _db_url()
 
 # LLM provider
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# (The HTTP gateway + web UI live in web/ — see web/gateway.py. This folder is
+#  worker-only: workflow, activities, and the config they need.)
 
 
 async def temporal_client():

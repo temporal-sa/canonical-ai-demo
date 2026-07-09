@@ -29,8 +29,8 @@ worker:
 		 echo "worker started")
 
 api:
-	@pgrep -f "uvicorn api:app" >/dev/null 2>&1 || \
-		(cd python && nohup uv run uvicorn api:app --port 8000 > /tmp/agent-api.log 2>&1 & \
+	@pgrep -f "uvicorn gateway:app" >/dev/null 2>&1 || \
+		(cd web && nohup uv run uvicorn gateway:app --port 8000 > /tmp/agent-api.log 2>&1 & \
 		 echo "gateway started (:8000)")
 
 web:
@@ -57,7 +57,7 @@ db:
 
 down:
 	-pkill -f "worker.py"
-	-pkill -f "uvicorn api:app"
+	-pkill -f "uvicorn gateway:app"
 	-pkill -f "http.server 5173"
 	-pkill -f "temporal server start-dev"
 	docker compose down
@@ -67,7 +67,7 @@ status:
 	@printf "postgres : "; docker compose ps --format '{{.Status}}' postgres 2>/dev/null || echo "stopped"
 	@printf "temporal : "; pgrep -f "temporal server start-dev" >/dev/null 2>&1 && echo "running (:7233, UI :8233)" || echo "stopped"
 	@printf "worker   : "; pgrep -f "worker.py" >/dev/null 2>&1 && echo "running" || echo "stopped"
-	@printf "gateway  : "; pgrep -f "uvicorn api:app" >/dev/null 2>&1 && echo "running (:8000)" || echo "stopped"
+	@printf "gateway  : "; pgrep -f "uvicorn gateway:app" >/dev/null 2>&1 && echo "running (:8000)" || echo "stopped"
 	@printf "web      : "; pgrep -f "http.server 5173" >/dev/null 2>&1 && echo "running (:5173)" || echo "stopped"
 
 logs:

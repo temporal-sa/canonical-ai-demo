@@ -7,9 +7,12 @@ The agentic loop is just a `while` loop — Temporal makes it durable,
 retryable, and pausable-for-humans.
 """
 
+import json
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
+from temporalio.exceptions import ActivityError
 
 with workflow.unsafe.imports_passed_through():
     from activities.llm import call_llm
@@ -24,6 +27,27 @@ with workflow.unsafe.imports_passed_through():
     )
     from prompts import system_prompt
 
+# Explicit retry policies (slide 31). maximum_attempts is unset = retry forever
+# with backoff — so a transient outage (rate-limit, DB down, flaky gateway) just
+# waits and recovers. The non_retryable types are the failures retrying can't
+# fix: a rejected LLM request, a business decline. Those fail immediately.
+LLM_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=10),
+    non_retryable_error_types=["LLMFatalError"],
+)
+TOOL_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=10),
+    non_retryable_error_types=["PurchaseDeclined"],
+)
+
+
+def _failure_message(e: ActivityError) -> str:
+    return getattr(e.cause, "message", None) or "That action could not be completed."
+
 
 @workflow.defn
 class SupportAgentWorkflow:
@@ -32,6 +56,7 @@ class SupportAgentWorkflow:
         self.pending_purchase: PendingPurchase | None = None
         self.approval: ApprovalDecision | None = None
         self.turn_in_progress: bool = False
+        self.llm_down: bool = False  # demo kill-switch, scoped to THIS conversation
 
     @workflow.run
     async def run(self, customer_email: str) -> None:
@@ -40,44 +65,62 @@ class SupportAgentWorkflow:
         while True: 
             await workflow.wait_condition(lambda: self.turn_in_progress)
 
-            while True:  # the ReAct loop for this turn
-                plan_response = await workflow.execute_activity(
-                    call_llm,
-                    LLMRequest(messages=self.messages),
-                    start_to_close_timeout=timedelta(seconds=60),
-                )
+            while True:
+                try:
+                    plan_response = await workflow.execute_activity(
+                        call_llm,
+                        LLMRequest(messages=self.messages),
+                        start_to_close_timeout=timedelta(seconds=60),
+                        retry_policy=LLM_RETRY,
+                    )
+                except ActivityError:
+                    # Unrecoverable LLM failure (rejected request, or gave up).
+                    # Surface it and end the turn — the conversation stays alive.
+                    self.messages.append(ChatMessage(
+                        role="assistant",
+                        content="I'm sorry — I hit an error I couldn't recover from. "
+                                "Please try again in a moment.",
+                    ))
+                    break
                 self.messages.append(plan_response.message)
 
                 if not plan_response.message.tool_calls:
                     break
 
                 for call in plan_response.message.tool_calls:
-                    if call.name == "purchase_tracks":
-                        self.pending_purchase = PendingPurchase(
-                            track_ids=call.args.get("track_ids", []),
-                            description=call.args.get("summary"),
-                        )
-                        await workflow.wait_condition(lambda: self.approval is not None)
-                        decision, self.approval, self.pending_purchase = self.approval, None, None
+                    try:
+                        if call.name == "purchase_tracks":
+                            self.pending_purchase = PendingPurchase(
+                                track_ids=call.args.get("track_ids", []),
+                                description=call.args.get("summary"),
+                            )
+                            await workflow.wait_condition(lambda: self.approval is not None)
+                            decision, self.approval, self.pending_purchase = self.approval, None, None
 
-                        if not decision.approved:
-                            reason = f" Reason: {decision.reason}" if decision.reason else ""
-                            result = f"The customer's approver DECLINED this purchase.{reason}"
+                            if not decision.approved:
+                                reason = f" Reason: {decision.reason}" if decision.reason else ""
+                                result = f"The customer's approver DECLINED this purchase.{reason}"
+                            else:
+                                result = await workflow.execute_activity(
+                                    execute_tool,
+                                    ToolRequest(call=call, customer_email=customer_email),
+                                    start_to_close_timeout=timedelta(seconds=30),
+                                    retry_policy=TOOL_RETRY,
+                                    summary=call.name,
+                                )
                         else:
                             result = await workflow.execute_activity(
                                 execute_tool,
                                 ToolRequest(call=call, customer_email=customer_email),
                                 start_to_close_timeout=timedelta(seconds=30),
-                                summary=call.name,  # shows the tool name in the UI
+                                retry_policy=TOOL_RETRY,
+                                summary=call.name,
                             )
-
-                    else:
-                        result = await workflow.execute_activity(
-                            execute_tool,
-                            ToolRequest(call=call, customer_email=customer_email),
-                            start_to_close_timeout=timedelta(seconds=30),
-                            summary=call.name,
-                        )
+                    except ActivityError as e:
+                        # Terminal tool failure — e.g. the non-retryable business
+                        # decline. Hand it back to the model as an error result so
+                        # it explains to the customer; the conversation continues.
+                        result = json.dumps({"error": _failure_message(e)})
                     self.messages.append(
                         ChatMessage(role="tool", content=result, tool_call_id=call.id)
                     )
@@ -103,6 +146,14 @@ class SupportAgentWorkflow:
     @workflow.signal
     def approve_purchase(self, decision: ApprovalDecision) -> None:
         self.approval = decision
+
+    @workflow.signal
+    def set_llm_status(self, down: bool) -> None:
+        self.llm_down = down
+
+    @workflow.query
+    def is_llm_down(self) -> bool:
+        return self.llm_down
 
     @workflow.query
     def transcript(self) -> list[ChatMessage]:

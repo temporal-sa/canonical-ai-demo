@@ -118,6 +118,24 @@ def get_order_details(order_id: int) -> list[dict]:
         return conn.execute(sql, {"order_id": order_id}).fetchall()
 
 
+def tracks_owned(email: str, track_ids: list[int]) -> list[dict]:
+    """Which of these track_ids the customer already purchased (id + name).
+    Used to decline a duplicate purchase — you can't buy what you already own."""
+    if not track_ids:
+        return []
+    sql = """
+        SELECT DISTINCT t.track_id, t.name AS track
+        FROM invoice_line l
+        JOIN invoice i ON i.invoice_id = l.invoice_id
+        JOIN customer c ON c.customer_id = i.customer_id
+        JOIN track t ON t.track_id = l.track_id
+        WHERE c.email = %(email)s AND l.track_id = ANY(%(ids)s)
+        ORDER BY t.track_id
+    """
+    with _connect() as conn:
+        return conn.execute(sql, {"email": email, "ids": track_ids}).fetchall()
+
+
 def record_purchase(email: str, track_ids: list[int]) -> dict:
     """The side effect: create an invoice + line items. Called only from an
     activity, and only after human approval."""
@@ -128,7 +146,18 @@ def record_purchase(email: str, track_ids: list[int]) -> dict:
             (email,),
         ).fetchone()
         if not cust:
-            raise ValueError(f"No customer account found for {email}")
+            # First purchase from a new (e.g. Google-authenticated) email —
+            # create the customer so isolation-by-email works without seeding.
+            new_id = conn.execute(
+                "SELECT coalesce(max(customer_id), 0) + 1 AS id FROM customer"
+            ).fetchone()["id"]
+            conn.execute(
+                """INSERT INTO customer (customer_id, first_name, last_name, email)
+                   VALUES (%s, %s, %s, %s)""",
+                (new_id, (email.split("@")[0] or "Demo")[:40], "Customer", email),
+            )
+            cust = {"customer_id": new_id, "address": None, "city": None,
+                    "state": None, "country": None, "postal_code": None}
 
         tracks = conn.execute(
             "SELECT track_id, name, unit_price FROM track WHERE track_id = ANY(%s)",

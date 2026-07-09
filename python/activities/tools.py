@@ -1,6 +1,6 @@
 """The EXECUTE TOOLS step (slide 28, primitive 03): tool calls as an Activity.
 
-One dispatch over the 4 tools → the plain SQL functions in queries.py.
+One dispatch over the tools → the plain SQL functions in db.py.
 Sync code (psycopg) — the worker runs it on a thread pool.
 
 Business errors (unknown customer, bad track IDs) return as model-visible
@@ -13,8 +13,26 @@ import json
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-import db
+from . import db
 from models.types import ToolRequest
+
+
+def _settle_purchase(email: str, track_ids: list[int]) -> dict:
+    """Checkout with one business rule: you can't buy a track you already own.
+
+    That's the UNRECOVERABLE failure — a non-retryable PurchaseDeclined that
+    Temporal does NOT retry (contrast the LLM kill-switch, which IS retried).
+    The workflow surfaces it to the customer and the conversation continues.
+    """
+    owned = db.tracks_owned(email, track_ids)
+    if owned:
+        names = ", ".join(f'"{o["track"]}"' for o in owned)
+        raise ApplicationError(
+            f"Purchase declined — the customer already owns {names}.",
+            type="PurchaseDeclined",
+            non_retryable=True,
+        )
+    return db.record_purchase(email, track_ids)
 
 
 @activity.defn
@@ -36,7 +54,7 @@ def execute_tool(req: ToolRequest) -> str:
         elif name == "get_order_details":
             result = db.get_order_details(args["order_id"])
         elif name == "purchase_tracks":
-            result = db.record_purchase(req.customer_email, args["track_ids"])
+            result = _settle_purchase(req.customer_email, args["track_ids"])
         else:
             raise ApplicationError(f"Unknown tool: {name}", non_retryable=True)
     except ValueError as e:

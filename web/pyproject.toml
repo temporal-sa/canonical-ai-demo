@@ -1,0 +1,12 @@
+[project]
+name = "support-agent-gateway"
+version = "0.1.0"
+description = "SDK-agnostic HTTP gateway + web UI for the durable support agent"
+requires-python = ">=3.11"
+# Thin: a Temporal client + a web server. No worker code, no DB, no LLM SDK —
+# it drives the workflow by string names, so it works against any SDK's worker.
+dependencies = [
+    "temporalio>=1.14",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
