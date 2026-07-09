@@ -47,7 +47,7 @@ Open **[http://localhost:5173](http://localhost:5173)** (the chat) and **[http:/
 Type a message — e.g. *"find me some AC/DC tracks"* — and watch the event history populate.
 
 ```bash
-make status     # what's running
+make status      # what's running
 make down        # stop everything
 make logs        # tail worker + gateway logs
 ```
