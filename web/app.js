@@ -1,7 +1,17 @@
 // Chat UI for the durable support agent. Vanilla JS, no build step.
 // Talks to whichever gateway BACKEND_URL points at (see config.js).
 
-const API = window.BACKEND_URL;
+// Never trust a localhost BACKEND_URL when we're not on localhost: in the
+// deployed container the gateway serves a dynamic /config.js (BACKEND_URL="",
+// same-origin https), but a stale/CDN-cached static config.js can leave the
+// localhost default in place — and fetching http://localhost from an https page
+// is blocked as mixed content. Fall back to same-origin so the app works
+// regardless of what config.js says; local dev (on localhost) is untouched.
+const _backend = window.BACKEND_URL || '';
+const API =
+  location.hostname !== 'localhost' && /localhost|127\.0\.0\.1/.test(_backend)
+    ? ''
+    : _backend;
 const $ = (id) => document.getElementById(id);
 
 let conversationId = null;

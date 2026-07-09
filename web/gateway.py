@@ -192,7 +192,14 @@ async def config_js():
         f'window.LLM_PROVIDER = "{LLM_PROVIDER}";\n'
         f'window.LLM_MODEL = "{LLM_MODEL}";\n'
     )
-    return Response(content=js, media_type="application/javascript")
+    # no-store: this is generated per-deploy and must never be cached by the
+    # browser or the CDN (Cloudflare) — a stale copy re-introduces the static
+    # config.js localhost defaults, which break the deployed app as mixed content.
+    return Response(
+        content=js,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
