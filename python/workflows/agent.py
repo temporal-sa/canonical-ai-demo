@@ -62,7 +62,15 @@ class SupportAgentWorkflow:
     async def run(self, customer_email: str) -> None:
         self.messages.append(ChatMessage(role="system", content=system_prompt(customer_email)))
 
-        while True: 
+        # DB identity is the workflow ID, NOT the customer email. Everything the
+        # agent persists (orders, purchase history) is scoped to THIS conversation:
+        # a new conversation is a new workflow ID = a clean slate. So there is no
+        # cross-session memory, and back-to-back demos never see each other's data —
+        # no reset or reseed needed. customer_email stays the real, authenticated
+        # email, used only for the system-prompt display above.
+        account_key = workflow.info().workflow_id
+
+        while True:
             await workflow.wait_condition(lambda: self.turn_in_progress)
 
             while True:
@@ -103,7 +111,7 @@ class SupportAgentWorkflow:
                             else:
                                 result = await workflow.execute_activity(
                                     execute_tool,
-                                    ToolRequest(call=call, customer_email=customer_email),
+                                    ToolRequest(call=call, account_key=account_key),
                                     start_to_close_timeout=timedelta(seconds=30),
                                     retry_policy=TOOL_RETRY,
                                     summary=call.name,
@@ -111,7 +119,7 @@ class SupportAgentWorkflow:
                         else:
                             result = await workflow.execute_activity(
                                 execute_tool,
-                                ToolRequest(call=call, customer_email=customer_email),
+                                ToolRequest(call=call, account_key=account_key),
                                 start_to_close_timeout=timedelta(seconds=30),
                                 retry_policy=TOOL_RETRY,
                                 summary=call.name,

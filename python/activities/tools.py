@@ -17,14 +17,14 @@ from . import db
 from models.types import ToolRequest
 
 
-def _settle_purchase(email: str, track_ids: list[int]) -> dict:
+def _settle_purchase(account_key: str, track_ids: list[int]) -> dict:
     """Checkout with one business rule: you can't buy a track you already own.
 
     That's the UNRECOVERABLE failure — a non-retryable PurchaseDeclined that
     Temporal does NOT retry (contrast the LLM kill-switch, which IS retried).
     The workflow surfaces it to the customer and the conversation continues.
     """
-    owned = db.tracks_owned(email, track_ids)
+    owned = db.tracks_owned(account_key, track_ids)
     if owned:
         names = ", ".join(f'"{o["track"]}"' for o in owned)
         raise ApplicationError(
@@ -32,7 +32,7 @@ def _settle_purchase(email: str, track_ids: list[int]) -> dict:
             type="PurchaseDeclined",
             non_retryable=True,
         )
-    return db.record_purchase(email, track_ids)
+    return db.record_purchase(account_key, track_ids)
 
 
 @activity.defn
@@ -48,13 +48,13 @@ def execute_tool(req: ToolRequest) -> str:
         elif name == "search_music_by_album":
             result = db.search_music_by_album(args["album"])
         elif name == "get_customer_orders":
-            result = db.get_customer_orders(req.customer_email)
+            result = db.get_customer_orders(req.account_key)
         elif name == "get_track_price":
             result = db.get_track_price(args["track_name"])
         elif name == "get_order_details":
             result = db.get_order_details(args["order_id"])
         elif name == "purchase_tracks":
-            result = _settle_purchase(req.customer_email, args["track_ids"])
+            result = _settle_purchase(req.account_key, args["track_ids"])
         else:
             raise ApplicationError(f"Unknown tool: {name}", non_retryable=True)
     except ValueError as e:

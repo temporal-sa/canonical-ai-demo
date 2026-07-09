@@ -28,7 +28,7 @@ class LLMResponse(BaseModel):
 
 class ToolRequest(BaseModel):
     call: ToolCall
-    customer_email: str
+    account_key: str  # conversation-scoped DB identity (the workflow ID), not an email
 
 
 class PendingPurchase(BaseModel):

@@ -1,44 +1,49 @@
-# Web UI — SDK-agnostic chat for the durable support agent
+# web/ — the frontend **and** the gateway
 
-A single-page vanilla-JS chat (no framework, no build step) that drives whichever gateway
-implements [`../API_CONTRACT.md`](../API_CONTRACT.md).
+This folder owns both halves of the demo's front door:
 
-## Point it at a backend
+- **`gateway.py`** — the one HTTP gateway. FastAPI, 5 endpoints, each one a single Temporal
+  client call (start / update / query / signal). It drives the workflow **by string names**,
+  so it imports no worker code and works against *any* SDK's worker (Python today, TypeScript
+  later). It also serves this UI same-origin. The endpoint list is the top of `gateway.py`.
+- **`index.html` / `app.js` / `config.js`** — the chat UI (vanilla JS, no build step).
 
-Edit `config.js`:
-
-```js
-window.BACKEND_URL = 'http://localhost:8000';  // python gateway (or the stub)
-// window.BACKEND_URL = 'http://localhost:8001';  // typescript gateway
-```
+The SDK folders (`python/`, `typescript/`) stay pure Temporal — worker, workflow, activities.
 
 ## Run it
 
-Any static file server works:
+Easiest — the whole local stack from the repo root:
 
 ```bash
-cd web
-python3 -m http.server 5173
-# open http://localhost:5173
+make up          # postgres + temporal + worker + gateway + UI
 ```
 
-## Develop against the stub (no Temporal, no LLM, no DB)
+Then open **http://localhost:8000** (the gateway serves the UI same-origin) and
+**http://localhost:8233** (the Temporal UI).
 
-`stub-server.mjs` is a dependency-free Node server that implements the API contract with
-canned behavior — it exists so the UI can be built/tested alone, and it doubles as the
-reference the SDK gateways are built against in Phase 1.
+Just the gateway on its own:
 
 ```bash
-node stub-server.mjs        # listens on :8000
+cd web && uv run uvicorn gateway:app --port 8000
 ```
 
-- Any message → echo reply after a short "thinking" delay.
-- A message containing **"buy"** or **"purchase"** → the `awaiting_approval` flow
-  (approval card with Approve/Reject; the outcome lands via transcript polling).
+## Develop the UI with no backend (stub)
 
-## What to notice (for demo purposes)
+`stub-server.mjs` is a dependency-free Node server that implements the same contract with
+canned replies — use it to iterate on the UI without Temporal, a worker, an LLM, or a DB.
 
-- The header shows the **workflow ID** — it *is* the conversation ID. Paste it into the
-  Temporal UI to watch the loop's event history live.
-- The approval card is the **HITL beat**: while it's showing, the workflow is durably parked
-  on `wait_condition()`, holding zero resources.
+```bash
+node stub-server.mjs        # :8000, same contract, fake data
+```
+
+A message containing **"buy"** triggers the `awaiting_approval` flow so you can style the
+approval card.
+
+## Notes
+
+- **No sign-in step.** The first message creates the workflow; the customer identity comes
+  from the auth gate's verified email in cloud, or a default locally.
+- **`config.js`** is the local-dev override. In the container, the gateway serves a dynamic
+  `/config.js` that sets `BACKEND_URL=""` (same origin) and the right Temporal UI link.
+- The **workflowId pill** under the hero links straight to this conversation's workflow in
+  the Temporal UI — the "conversation ID *is* the workflow ID" beat.
