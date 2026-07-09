@@ -73,7 +73,7 @@ For the full cloud walkthrough (exact prompts + what to say), see **[TALK_TRACK.
 Local-only chaos moves (the cloud demo uses the API-status toggle instead):
 
 ```bash
-make kill-worker && make worker   # crash-recovery: kill compute mid-turn, it resumes
+make kill-worker  && make worker   # crash-recovery: kill compute mid-turn, it resumes
 make kill-db      && make db       # infra retry: kill the database, the agent waits it out
 ```
 
