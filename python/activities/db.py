@@ -1,4 +1,4 @@
-"""Data module — plain parametrized SQL over Chinook (Postgres via psycopg).
+"""Data module — plain parametrized SQL over the music-store dataset (Postgres via psycopg).
 
 One function per tool. No ORM, no abstraction: all data access lives in this
 one file, which is what keeps it easy to read (and easy to swap later).

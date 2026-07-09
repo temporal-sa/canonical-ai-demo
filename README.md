@@ -5,7 +5,7 @@ The 100-level, canonical agentic demo for the SA org. It proves one sentence:
 > **The agentic ReAct loop is just a `while` loop — and Temporal makes that loop
 > durable, retryable, and pausable-for-humans with essentially no extra code.**
 
-A single support agent for the **Chinook** music store: it searches the catalog, checks a
+A single support agent for a music store: it searches the catalog, checks a
 customer's orders, and buys tracks — with a human approval gate on purchases. The LLM call
 and every tool are Temporal **activities**; the agent loop is a Temporal **workflow**; the
 human approval is a **signal**; the agent's memory is the **event history**.
@@ -84,7 +84,7 @@ python/                  the agent — pure Temporal code (reference implementat
   workflows/agent.py     ★ the ReAct loop — this file IS the demo
   activities/llm.py      call_llm — Anthropic (default) or OpenAI, one per provider
   activities/tools.py    execute_tool — dispatches the tools to db.py
-  activities/db.py       plain parametrized SQL over Chinook (the data layer)
+  activities/db.py       plain parametrized SQL over the music dataset (the data layer)
   prompts.py             the single system prompt + the tool schemas
   models/types.py        typed payloads (pydantic → readable in the Temporal UI)
   worker.py              the worker entrypoint
@@ -92,7 +92,7 @@ web/                     frontend + the ONE gateway (SDK-agnostic)
   gateway.py             FastAPI: each endpoint = one Temporal client call, driven
                          by string names — no worker code, works against any SDK
   index.html · app.js    the chat UI (vanilla JS, no build step)
-db/                      vendored chinook.sql + the demo customer seed
+db/                      vendored seed.sql + the demo customer seed
 docker/                  Dockerfiles for cloud (app=gateway / worker / postgres)
 deploy/                  the DemoProject CR + how to ship to the shared cluster
 Makefile                 the whole local stack: up / down / status / kill-*
@@ -120,4 +120,4 @@ env var to point elsewhere — nothing else changes:
 | `ANTHROPIC_API_KEY`                       | *(required)*                                    | your key                                        |
 | `LLM_PROVIDER`                            | `anthropic`                                     | or `openai`                                     |
 | `TEMPORAL_ADDRESS` / `TEMPORAL_NAMESPACE` | `localhost:7233` / `default`                    | Temporal Cloud → set these + `TEMPORAL_API_KEY` |
-| `DB_URL`                                  | `postgresql://demo:demo@localhost:5432/chinook` | or discrete `DB_HOST`/`DB_PORT`/…               |
+| `DB_URL`                                  | `postgresql://demo:demo@localhost:5432/music`   | or discrete `DB_HOST`/`DB_PORT`/…               |

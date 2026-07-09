@@ -28,9 +28,9 @@ def _db_url() -> str:
         user = os.getenv("DB_USER", "demo")
         pw = os.getenv("DB_PASSWORD", "demo")
         port = os.getenv("DB_PORT", "5432")
-        name = os.getenv("DB_NAME", "chinook")
+        name = os.getenv("DB_NAME", "music")
         return f"postgresql://{user}:{pw}@{host}:{port}/{name}"
-    return "postgresql://demo:demo@localhost:5432/chinook"
+    return "postgresql://demo:demo@localhost:5432/music"
 
 
 DB_URL = _db_url()

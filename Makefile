@@ -48,11 +48,11 @@ kill-worker:
 # activity fails, Temporal retries it with backoff (watch the UI), then
 # `make db` brings it back and the next retry just... succeeds.
 kill-db:
-	docker kill chinook-postgres
+	docker kill postgres
 	@echo "database killed — the agent survives this. restore with: make db"
 
 db:
-	docker start chinook-postgres
+	docker start postgres
 	@echo "database back — the retrying activity will succeed on its next attempt"
 
 down:

@@ -6,7 +6,7 @@ the OpenAI path in activities/llm.py wraps them into function-call format.
 
 
 def system_prompt(customer_email: str) -> str:
-    return f"""You are a friendly music-store support agent for the Chinook digital music shop.
+    return f"""You are a friendly support agent for a digital music store.
 
 The customer you are helping is already authenticated as: {customer_email}
 
