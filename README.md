@@ -61,7 +61,7 @@ For the full cloud walkthrough (exact prompts + what to say), see **[TALK_TRACK.
 1. **Happy path** — *"find me some AC/DC tracks"* → the agent searches and replies. Every
    reason-step and tool call is an event in the history — the reasoning trace, for free.
 2. **Multi-step plan** — one request fans out into several tool calls in a single turn.
-3. **LLM outage (the AI beat)** — flip the **API status** panel (bottom-right) to *Major
+3. **LLM outage** — flip the **API status** panel (bottom-right) to *Major
    outage*; the `call_llm` activity retries with backoff (watch the UI). Flip back → the next
    retry succeeds. No code, cloud-safe, and scoped to your conversation only.
 4. **Human-in-the-loop** — ask to buy a track; the workflow parks on `wait_condition`
