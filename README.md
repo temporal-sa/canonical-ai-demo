@@ -1,6 +1,6 @@
 # Canonical AI Demo — a Durable Agent on Temporal
 
-The 100-level, canonical agentic demo for the SA org. It proves one sentence:
+The 101-level, canonical agentic demo for the SA org. It proves one sentence:
 
 > **The agentic ReAct loop is just a `while` loop — and Temporal makes that loop
 > durable, retryable, and pausable-for-humans with essentially no extra code.**
