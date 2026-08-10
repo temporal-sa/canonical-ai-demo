@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 load_dotenv()
 
-TASK_QUEUE = "support-agent"
+TASK_QUEUE = "travel-agent"
 
 # Temporal connection — local dev server by default; Temporal Cloud via env.
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
@@ -28,9 +28,9 @@ def _db_url() -> str:
         user = os.getenv("DB_USER", "demo")
         pw = os.getenv("DB_PASSWORD", "demo")
         port = os.getenv("DB_PORT", "5432")
-        name = os.getenv("DB_NAME", "music")
+        name = os.getenv("DB_NAME", "travel")
         return f"postgresql://{user}:{pw}@{host}:{port}/{name}"
-    return "postgresql://demo:demo@localhost:5432/music"
+    return "postgresql://demo:demo@localhost:5432/travel"
 
 
 DB_URL = _db_url()
@@ -39,6 +39,16 @@ DB_URL = _db_url()
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# research_destination snappiness: cap how many web searches each search activity
+# may run. 1 = a single focused lookup per facet (fastest — tames the slow-outlier
+# that gates the parallel fan-out's wall-clock). Bump it for more thorough results.
+WEB_SEARCH_MAX_USES = int(os.getenv("WEB_SEARCH_MAX_USES", "1"))
+
+# How many searches the planner fans out per research_destination pass. These run
+# in PARALLEL activities, so more searches = a richer guide and a bigger fan-out to
+# watch WITHOUT much extra wall-clock (bounded by the slowest single search).
+RESEARCH_SEARCHES = int(os.getenv("RESEARCH_SEARCHES", "6"))
 
 # (The HTTP gateway + web UI live in web/ — see web/gateway.py. This folder is
 #  worker-only: workflow, activities, and the config they need.)

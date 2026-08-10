@@ -23,3 +23,6 @@ nohup.out
 .DS_Store
 .idea/
 .vscode/
+
+# claude code local settings
+.claude/settings.local.json

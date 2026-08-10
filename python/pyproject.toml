@@ -1,7 +1,7 @@
 [project]
-name = "support-agent"
+name = "travel-agent"
 version = "0.1.0"
-description = "Durable agentic ReAct loop on Temporal — Python"
+description = "Durable agentic travel-planner ReAct loop on Temporal — Python"
 requires-python = ">=3.11"
 dependencies = [
     "temporalio>=1.14",

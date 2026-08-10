@@ -1,225 +1,253 @@
-# Canonical AI Agent Demo — Speaker Notes
+# Demo Run Script: Temporal owns the ReAct loop
 
-## Overview
+A word-for-word script for the Greece demo (Athens, Santorini, Mykonos). Each
+beat is **Tell** (say this), **Show** (do this), **Tell** (say this). The spoken
+lines are in quotes so you can practice off them directly.
 
-**What this demo is:** A single AI agent for a digital music store — it searches a
-catalog, reasons over what it already knows, plans multi-step tasks, and makes purchases
-with a human's approval. You'll walk the full lifecycle of an agent loop: a simple turn,
-memory vs. new data, surviving a flaky LLM provider, a multi-step plan, a durable
-human-in-the-loop wait, and a business failure it knows *not* to retry.
+---
 
-**What you're proving to the audience:** An AI agent is just a loop — the model reasons,
-calls a tool, looks at the result, and repeats. That loop is fragile: it chains LLM calls,
-tool calls, and human input, and any step can fail. Temporal makes the loop durable by
-default, so teams stop writing retry logic and state machines and start shipping agent
-features.
+## Before you start
 
-**Three things the audience should walk away believing:**
+```bash
+make up
+```
 
-- **Reliability out of the box** — the agent survives a flaky LLM, a multi-day wait, and a
-dead worker without re-running paid steps or losing progress. Zero recovery code.
-- **Ship faster** — the whole agent is ~150 lines of ordinary Python. Retries, human-in-
-the-loop, and recovery are one line each, not subsystems.
-- **Full visibility** — every LLM call, tool call, and human input is one event history:
-an audit log *and* the agent's memory, for free.
+- Chat UI at [http://localhost:8000](http://localhost:8000), Temporal UI at [http://localhost:8233](http://localhost:8233). Put them side by side.
+- Have a terminal ready for the crash beat (`make kill-worker` and `make worker`).
+- Stay on the seeded rails: fly from New York on Oct 3, 2026. Greece is fully built out
+(Athens, Santorini, Mykonos) with real hotels, sights, and island flights. Destination
+research is live web search, so any place works there.
 
-## Persona focused
+---
 
-**Business leaders**
+## 1. One turn of the loop
 
-- Modernize with agentic AI while your processes survive crashes and outages without
-losing work or re-spending tokens.
-- Speed up developer velocity — teams focus on business logic, not resilience plumbing.
-- Full visibility into every running agent through comprehensive observability.
+**Tell:**
 
-**Developers**
+> "The big idea I want to land today is really simple. An AI agent is just a loop. The
+> model looks at what you asked, it decides to call a tool, it looks at the result, and it
+> answers. That's the whole thing. What makes it interesting is what Temporal does around
+> that loop. So let me start with the simplest possible version."
 
-- Temporal preserves application state; your code recovers from failures and runs to
-completion.
-- The Temporal UI gives traceability for every call, event, and output.
-- The agent loop is just code — 7 language SDKs, polyglot by design.
+**Show:** type
 
-## Setup
+```
+Find me flights from New York to Athens on October 3rd.
+```
 
-- **Left screen:** the app at **[canonical-ai-demo.tmprl-demo.cloud](https://canonical-ai-demo.tmprl-demo.cloud)** — sign in
-with your Google account (that's the auth gate; it also becomes your customer identity).
-- **Right screen:** the **Temporal Cloud UI** for this namespace (jump to it by clicking
-the **workflowId** pill in the app once a conversation starts).
-- **Notice the API status panel** (bottom-right): it names the provider
-(*Anthropic API · claude-sonnet-4-6*) and shows **● Operational**.
-- Everything is driven from the chat. The only controls are the chat box and the API status
-panel — no terminal, no kubectl required.
+**Tell:**
 
-## Opening (~30 sec)
+> "So I just asked in plain English, and the model decided on its own to call our flight
+> search tool, it got the results back, and it wrote that answer. That is one turn of the
+> loop. Now here's the part that matters. This whole chat is actually a Temporal workflow
+> running behind the scenes. If I click this workflow ID up here, it opens that workflow in
+> Temporal, and look, every step is right here in the history. The model call, the tool
+> call, the result. So the model calls are activities, the tools are activities, and the
+> loop itself is the workflow. You get this whole history for free, and it doubles as the
+> agent's memory."
 
-- Everything runs from the chat. No terminal, no kubectl.
-- One-line mental model to open with:
+---
 
-> "An AI agent is just a loop: the model *reasons* about what to do, *calls a tool*, looks
-> at the result, and repeats until it's done. That's it. What we're really here to see is
-> what Temporal does *around* that loop."
+## 2. The loop iterates
 
-## An agent is a loop (~90 sec)
+**Tell:**
 
-- **ACTION: Type** → `Find me some AC/DC tracks`
-- The agent searches the catalog and lists tracks with prices.
+> "That was one tool call. But most real requests need a few. So let me give it something
+> it has to break down into steps."
 
-> "I asked in plain English. Behind the scenes the model *decided* to call a `search_music`
-> tool, got rows back, and wrote that answer. Reason → act → respond. That decision wasn't
-> hard-coded — the model chose the tool."
+**Show:** type
 
-- **ACTION: Click the `workflowId` pill** → the Temporal UI opens on this conversation.
+```
+Now find a well-located 4-star hotel in Athens for four nights, and a couple of must-see sights.
+```
 
-> "Here's the part that's different. This chat session is a **Temporal workflow** — a durable
-> program. Every step the agent took is an **event** in this history: the model call, the
-> tool call, the result. So this is your agent's reasoning trace, recorded automatically — an
-> audit log you get for free, and, as we'll see, the agent's memory."
+**Tell:**
 
-- **ACTION: Point at** the `ActivityTaskScheduled` rows — the tool name shows on the
-`execute_tool` activity. *"The model calls are activities; the tools are activities; the
-loop is the workflow."*
+> "So one sentence from me turned into two separate tool calls. It searched hotels, it
+> searched things to do, and then it pulled the answer together. I never told it the order,
+> or which tools to use. It worked that out. And if you look back at the history, both of
+> those calls are sitting right there under this one turn, each recorded on its own."
 
-## The agent decides *when* to use a tool (~2 min)
+---
 
-- The point is subtle and worth teaching: an agent calls a tool only when it needs
-information it doesn't already have. Do it in two small prompts.
+## 3. Build the itinerary
 
-**Needs new data → a fresh tool call**
+**Tell:**
 
-- **ACTION: Type** → `Now find me some Queen tracks`
-  - It calls `search_music` again (no Queen data) and lists them. A new tool call appears.
+> "Now let's actually start building the trip. Keep an eye on the panel over on the left
+> while I do this."
 
-> "Different artist — the model doesn't have that in context, so it reaches for the search
-> tool again. That's the loop turning: plan → call a tool → answer."
+**Show:** type
 
-**Derivable from context → *no* tool call**
+```
+Perfect, add those to my itinerary.
+```
 
-- **ACTION: Type** → `Which of those is the cheapest?`
-  - It answers immediately — and **no** `execute_tool` event appears, only a `call_llm`.
+**Tell:**
 
-> "Now watch — I asked which is cheapest, and it did *not* call a tool. The prices were
-> already in the conversation from the search a moment ago, so it just reasoned over them.
-> That conversation history *is* the agent's memory, and it's smart about not re-fetching
-> what it already knows. Tools are for new information; everything else is reasoning over
-> memory. And that memory is durable — it's the workflow's event history, not something in
-> RAM."
+> "There we go. The flight, the hotel, and both sights just dropped into the itinerary on
+> the left. And here's what I want you to notice. That itinerary is not sitting in a
+> database, or a cache, or a shopping cart table somewhere. It is just state inside the
+> workflow. So if the worker died right now, it would come back with all of this exactly as
+> it is. Nothing lost."
 
-## Surviving a flaky LLM — the AI beat (~2.5 min)
+---
 
-- In an AI app the thing that's *actually* flaky is the LLM provider — rate limits, 5xx,
-timeouts. This is the beat that matters most for this audience.
-- **ACTION: Click the API status panel** → it flips to **● Major outage**.
-- **ACTION: Type** → `Recommend three AC/DC tracks for a first-time listener.`
-  - The chat sits on *thinking…* — it does **not** answer. (This turn needs the model —
-  `call_llm` — which is exactly what the outage blocks.)
+## 4. Deep research, in parallel, and it survives a crash
 
-> "I just simulated the LLM provider going down. In a normal agent, this is where you crash,
-> or where you'd write retry logic, backoff, a dead-letter queue… Look at what our agent code
-> does about it: nothing."
+**Tell:**
 
-- **ACTION: Switch to the Temporal UI** → open this workflow → **Pending Activities**.
+> "Okay, this is my favorite part. So far every step has been a quick little tool call. But
+> sometimes you want the agent to go do some real homework. I'm thinking about tacking on a
+> few days in the islands, but honestly I don't know how I'd spend them. So I'm going to
+> have it do a deep dive."
 
-> "The `call_llm` activity is failing and Temporal is *retrying* it — you can see the attempt
-> count climbing, with backoff. The conversation isn't broken; it's patient. I wrote one line
-> — a retry policy — not a retry *loop*."
+**Show:** type
 
-- **ACTION: Click the panel back to ● Operational.**
-  - Within a few seconds the recommendation appears in the chat.
+```
+I'm also thinking about a few extra days in the Greek islands. Do a deep dive on how to spend a few days in Santorini and Mykonos.
+```
 
-> **Key message:** "The provider came back and the next retry just succeeded. The user never
-> saw an error. The unreliable parts of an agent — the model, the tools — are activities, and
-> Temporal makes them retry and recover with no code from you."
+**Tell:**
 
-## Building a multi-step plan (~2 min)
+> "So what's happening now is a bit different. This isn't one tool call. Under the hood it
+> planned out a handful of web searches, and it's running all of them at once, live against
+> the web, and then it'll write the whole thing up. Jump over to Temporal for a second. See
+> all these search activities firing off in parallel? Now here's the fun part. I'm going to
+> kill the worker right in the middle of this."
 
-- Now escalate: one request the model has to *decompose* into several tool calls.
-- **ACTION: Type** → `Put together a 5-song sampler for me — two rock tracks, two pop tracks, and one blues track.`
-  - The agent decomposes it into a `search_music_by_genre` call for **rock, pop, and blues** —
-  then assembles the sampler.
-- **ACTION: Point at the Temporal UI** — the cluster of `execute_tool · search_music_by_genre`
-events under this one `send_message` turn, one per genre.
+**Show:** run
 
-> "One sentence from me became a plan: find something in each of three genres. Watch the
-> history — several tool calls in a single turn, then the agent stitches the results into one
-> answer. I didn't script 'search rock, then pop, then blues.' The model decomposed the
-> request and the loop executed each step. That planning-and-acting, several steps deep, is
-> the 'agent' part — and every step is a durable event you can inspect and replay."
+```
+make kill-worker      # wait a beat, then:
+make worker
+```
 
-> **Demo tip:** Adding "based on my purchase history" makes the agent also call
-> `get_customer_orders` for the richer chain — but only run it that way *after* the purchase
-> beat below, since a fresh conversation has no history yet (the DB is scoped per-conversation
-> with no cross-session memory). Before the purchase, keep the prompt as written above.
+**Tell:**
 
-## Waiting for a human (~2 min)
+> "And it just picks right back up. The searches that already finished stay finished, they
+> don't run again, and only the ones that hadn't come back get retried. I did not write a
+> single line of retry logic or recovery code for that. That is all Temporal. In plain
+> Python you'd be hand rolling async tasks, tracking which ones finished, and figuring out
+> how to resume after a crash. Here it's basically one line."
 
-- **ACTION: Type** → `Buy those tracks for me.`
-  - The agent confirms and an **Approve / Reject** card appears; the turn parks.
-- **ACTION: Before clicking, switch to the Temporal UI.**
+**Then, once the guide lands, say:**
 
-> "The agent wants to make a purchase, so it's asking a human first. The workflow is now
-> **parked** — waiting on a signal. And notice in the UI it's healthy and idle: it's holding
-> no thread, no connection, no memory to speak of. It could wait like this for a minute or for
-> thirty days — same code, same (near-zero) cost. Try building *that* with a cron job and a
-> database."
+> "Alright, that gave me a really good feel for it. So let me add those island days to the
+> trip."
 
-- **ACTION: Click Approve.**
+**Show:** type
 
-> "Approving sends a **signal** into the running workflow. It wakes up exactly where it left
-> off, charges the order, and confirms." (The confirmation with an invoice number lands in
-> chat.)
+```
+Love it, add a few days in Santorini and Mykonos to my itinerary.
+```
 
-## Knowing what *not* to retry (~90 sec)
+**Tell:**
 
-- **ACTION: Type** → `Actually, buy the first of those three again.` *(anything you just purchased)*
-- Approve it → the agent comes back with *"that was declined — you already own it."* The
-conversation continues normally.
+> "And it just built out both legs for me. It found the island hop flights, it picked the
+> hotels, it added a couple of things to do on each island, and it dropped all of it into
+> the plan. So the trip on the left is now a full multi city itinerary, and I never had to
+> spell any of it out."
 
-> **Key message:** "This one's a *business* failure — you can't buy a track you already own.
-> Contrast it with the LLM outage: that was transient, so Temporal retried it. This one is
-> **non-retryable** — retrying would never help — so Temporal doesn't. The failed step is
-> still right there in the history for audit, but the agent handled it gracefully and the chat
-> rolls on. Retryable vs. not is a one-word decision in the code, and Temporal respects it."
+---
 
-## Close (~30 sec)
+## 5. The provider goes down
 
-> "That's the whole thing. The agent loop is about 150 lines of ordinary Python — a `while`
-> loop, the model and tools as activities, a signal for the human. Everything you saw it
-> survive — a flaky provider, a multi-day wait, a business rejection — it survived because
-> durability is Temporal's job, not the agent's. This is the single-agent foundation;
-> multi-agent and long-running memory build on exactly this."
+**Tell:**
 
-**Three takeaways:**
+> "Now let me show you what happens when things go wrong, because in the real world the
+> model provider goes down all the time. I'm going to open demo controls up here and flip
+> this switch to simulate the LLM being unavailable."
 
-- **Reliability out of the box** — the agent survived a flaky provider, a long wait, and a
-business rejection without re-running paid steps.
-- **Ship faster** — teams write business logic, not retry queues and state machines.
-- **Full visibility** — every LLM call, event, and output in one place for understanding and
-debugging.
+**Show:** open **Demo controls** (top right), flip **LLM API** off, then type
 
-Works with Anthropic, OpenAI, any model provider.
+```
+Great, now pull the whole thing into a day-by-day plan across Athens, Santorini, and Mykonos.
+```
 
-## Q&A ammunition
+**Tell:**
 
-- **"Is the LLM outage fake?"** — It's a real toggle that makes the activity raise — Temporal
-genuinely retries it. Same mechanism as a real rate-limit or 5xx; I just control *when* so
-it fits the talk.
-- **"Does the waiting cost money / hold resources?"** — No — a parked workflow holds nothing;
-it's not a thread or a held connection. It wakes on the signal. That's the "wait days for
-free" claim, literally.
-- **"Isn't the LLM switch global — would it break other demos?"** — No, it's scoped to *this*
-conversation's workflow. Two people can demo at once and only affect their own session.
-- **"How do I add a tool?"** — A tool schema, one SQL function, one dispatch line — zero
-workflow changes. The catalog grew from 4 tools to 8 that way.
-- **"Where's the agent's memory?"** — The workflow's event history *is* the memory — no
-external store, and it survives crashes and restarts.
-- **"Retryable vs non-retryable?"** — Transient errors (LLM outage, network) retry
-automatically; business errors (already-own) are marked non-retryable and fail fast. One
-flag on the error.
+> "So it's just sitting there thinking, because this turn needs the model, and the model is
+> down. But notice, the app didn't crash, and nobody got an error. If I pop over to
+> Temporal, you can see it's retrying that call, over and over, backing off each time. Now
+> watch what happens when I bring it back."
+
+**Show:** flip **LLM API** back on.
+
+**Tell:**
+
+> "And there's the answer. The very next retry just went through, and the person using this never saw a thing. The unreliable parts of an agent, the model and the tools, are all activities, and Temporal retries them for me. That is one line of config, not custom retry logic that I had to build."
+
+---
+
+## 6. Book it, with a human in the loop
+
+**Tell:**
+
+> "Okay, the trip looks great. Let me go ahead and book it. And this is the human in the
+> loop moment."
+
+**Show:** type
+
+```
+This looks perfect, book the whole trip.
+```
+
+**Tell:**
+
+> "So instead of just charging ahead and booking, it stops and asks me to confirm. And here's the neat part. Right now, over in Temporal, this workflow is paused. It's not burning a thread, it's not holding a connection open, it's just sitting there waiting on a person. It could wait like this for a minute, or for thirty days, and it costs basically nothing. So when I click confirm, that sends a signal into the workflow, and it wakes up right where it left off and finishes the booking."
+
+**Show:** click **Confirm**.
+
+**Tell:**
+
+> "And it's booked. The itinerary clears out, and we're done."
+
+---
+
+## 7. Knowing what not to retry (optional)
+
+**Tell:**
+
+> "One more quick one. I told you Temporal retries things that fail. But some failures
+> should not be retried, and it knows the difference. Watch what happens if I try to book
+> that same flight a second time."
+
+**Show:** type
+
+```
+Actually, add that Athens to Santorini flight again and book it.
+```
+
+**Tell:**
+
+> "And it comes right back and says that flight's already in the trip, it's not going to
+> book it twice. That's a business rule, not a glitch. So compare that to the outage a
+> minute ago. That was temporary, so Temporal just kept retrying until it recovered. This
+> one is never going to succeed, no matter how many times you try, so it fails fast and the
+> agent just explains it. And that difference is one flag on the error.
+>
+> And that's really the whole point. It was the same simple loop the entire way through.
+> And Temporal quietly handled the flaky provider, the parallel research, a full on crash,
+> a long pause waiting on a human, and a failure it knew not to retry. And I never once had
+> to write the resilience code myself."
+
+---
 
 ## Reset between runs
 
-- A new browser session / new conversation is a fresh workflow (the **workflowId** changes).
-- Purchases are per-conversation; the API status switch is per-conversation, so it resets
-when you start a new one.
-- Nothing to restart between demos.
+- A new conversation, or just refreshing the page, gives you a fresh workflow.
+- The itinerary, the bookings, and the LLM toggle are all per conversation, so they reset
+on their own. Nothing to restart between demos.
+
+## If a prompt stalls
+
+- No flights or hotels found: you're off the seeded rails. Stay with New York, Oct 3, and
+Athens / Santorini / Mykonos.
+- "That airline isn't available": the model won't invent flights, so just say "the cheapest one."
+- If a query hangs, run `make status`, and if the worker is down, `make worker`.
+
+> **Shorter alternate opener (travel for an event):** "I'd like to travel for an event." then
+> "Athens in September", which finds real events, then flights, then an invoice. It's a
+> quicker, goal-driven version that mirrors the original Temporal AI Agent.
 

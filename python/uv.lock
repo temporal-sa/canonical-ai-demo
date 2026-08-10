@@ -512,33 +512,6 @@ wheels = [
 ]
 
 [[package]]
-name = "support-agent"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "fastapi" },
-    { name = "openai" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "temporalio" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.69" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "openai", specifier = ">=1.60" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "temporalio", specifier = ">=1.14" },
-    { name = "uvicorn", specifier = ">=0.32" },
-]
-
-[[package]]
 name = "temporalio"
 version = "1.29.0"
 source = { registry = "https://pypi.org/simple" }
@@ -567,6 +540,33 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/87/d7/0535a28b1f5f24f6612fb3ff1e89fb1a8d160fee0f976e0aa6803862134b/tqdm-4.68.3.tar.gz", hash = "sha256:00dfa48452b6b6cfae3dd9885636c23d3422d1ec97c66d96818cbd5e0821d482", size = 170596, upload-time = "2026-06-17T07:36:52.105Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d8/8e/bb97bb0c71802080bfc8952937d174e49cfc50de5c951dd47b2496f0dcdb/tqdm-4.68.3-py3-none-any.whl", hash = "sha256:39832cc2def2789a6f29df83f172db7416cea70052c0907a57801c5f2fdccb03", size = 78337, upload-time = "2026-06-17T07:36:50.132Z" },
+]
+
+[[package]]
+name = "travel-agent"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "fastapi" },
+    { name = "openai" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "temporalio" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.69" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "openai", specifier = ">=1.60" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "temporalio", specifier = ">=1.14" },
+    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [[package]]

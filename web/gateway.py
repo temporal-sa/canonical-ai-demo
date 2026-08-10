@@ -1,9 +1,9 @@
 """HTTP gateway — the ONE gateway for the demo, decoupled from any SDK.
 
-It drives the workflow by **string names**, so it imports
-no worker code and works against whichever worker is running — Python or
-TypeScript. `web/` owns the frontend and this API; the SDK folders stay pure
-Temporal (worker + workflow + activities).
+It drives the workflow by **string names**, so it imports no worker code and
+works against whichever worker is running — Python or TypeScript. `web/` owns
+the frontend and this API; the SDK folders stay pure Temporal (worker +
+workflow + activities).
 
     cd web && uv run uvicorn gateway:app --port 8000
 
@@ -32,9 +32,9 @@ TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
 TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
 TEMPORAL_TLS_CERT = os.getenv("TEMPORAL_TLS_CERT")
 TEMPORAL_TLS_KEY = os.getenv("TEMPORAL_TLS_KEY")
-TASK_QUEUE = os.getenv("TASK_QUEUE", "support-agent")
-WORKFLOW_TYPE = os.getenv("WORKFLOW_TYPE", "SupportAgentWorkflow")
-DEFAULT_CUSTOMER_EMAIL = os.getenv("DEFAULT_CUSTOMER_EMAIL", "sa@temporal.io")
+TASK_QUEUE = os.getenv("TASK_QUEUE", "travel-agent")
+WORKFLOW_TYPE = os.getenv("WORKFLOW_TYPE", "TravelAgentWorkflow")
+DEFAULT_TRAVELLER_EMAIL = os.getenv("DEFAULT_TRAVELLER_EMAIL", "sa@temporal.io")
 WEB_DIR = os.getenv("WEB_DIR", str(Path(__file__).resolve().parent))
 
 
@@ -67,8 +67,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="support-agent gateway", lifespan=lifespan)
+app = FastAPI(title="travel-agent gateway", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def no_cache_ui(request: Request, call_next):
+    """Force the browser to revalidate the UI assets so an updated index.html /
+    app.js is never served stale from cache (a stale app.js can break the page)."""
+    resp = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.endswith(".html") or path.endswith(".js"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
 
 
 @app.exception_handler(HTTPException)
@@ -87,6 +98,10 @@ class Approve(BaseModel):
 
 class LLMStatus(BaseModel):
     down: bool
+
+
+class Clarifications(BaseModel):
+    answers: dict[str, str]
 
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
@@ -111,9 +126,9 @@ async def create_conversation(request: Request):
     # Identity: the auth gate's verified email (cloud) → local default. The
     # X-Temporal-Auth-Email header is trustworthy (the platform strips any
     # client-supplied copy before the gate).
-    email = request.headers.get("X-Temporal-Auth-Email") or DEFAULT_CUSTOMER_EMAIL
+    email = request.headers.get("X-Temporal-Auth-Email") or DEFAULT_TRAVELLER_EMAIL
     slug = re.sub(r"[^a-z0-9]+", "-", email.lower()).strip("-")
-    conversation_id = f"support-{slug}-{secrets.token_hex(2)}"
+    conversation_id = f"trip-{slug}-{secrets.token_hex(2)}"
     await app.state.temporal.start_workflow(
         WORKFLOW_TYPE, email, id=conversation_id, task_queue=TASK_QUEUE
     )
@@ -149,7 +164,9 @@ async def pending_approval(conversation_id: str):
         _not_found(e)
     if pending is None:
         return {"pending": None}
-    return {"pending": {"trackIds": pending["track_ids"], "description": pending["description"]}}
+    return {"pending": {"action": pending["action"], "title": pending["title"],
+                        "detail": pending["detail"], "amount": pending["amount"],
+                        "args": pending["args"]}}
 
 
 @app.post("/conversations/{conversation_id}/approve", status_code=202)
@@ -158,10 +175,50 @@ async def approve(conversation_id: str, body: Approve):
     try:
         if await handle.query("pending_approval") is None:
             raise HTTPException(status_code=409, detail="nothing pending")
-        await handle.signal("approve_purchase", {"approved": body.approved, "reason": body.reason})
+        await handle.signal("confirm_action", {"approved": body.approved, "reason": body.reason})
     except RPCError as e:
         _not_found(e)
     return {}
+
+
+# ── research_destination: live fan-out progress + clarifying-questions HITL ──
+@app.get("/conversations/{conversation_id}/research-status")
+async def research_status(conversation_id: str):
+    try:
+        s = await _handle(conversation_id).query("research_status")
+    except RPCError as e:
+        _not_found(e)
+    return {
+        "phase": s["phase"],
+        "searchesTotal": s["searches_total"],
+        "searchesDone": s["searches_done"],
+        "plan": [{"query": p["query"], "reason": p["reason"]} for p in s["plan"]],
+        "questions": s["questions"],
+    }
+
+
+@app.post("/conversations/{conversation_id}/clarifications", status_code=202)
+async def clarifications(conversation_id: str, body: Clarifications):
+    try:
+        await _handle(conversation_id).signal("provide_clarifications", body.answers)
+    except RPCError as e:
+        _not_found(e)
+    return {}
+
+
+@app.get("/conversations/{conversation_id}/itinerary")
+async def itinerary(conversation_id: str):
+    try:
+        items = await _handle(conversation_id).query("itinerary_view")
+    except RPCError as e:
+        _not_found(e)
+    total = round(sum(i["price"] for i in items), 2)
+    return {
+        "items": [{"itemId": f"{i['kind']}-{i['ref_id']}", "kind": i["kind"],
+                   "title": i["title"], "subtitle": i["subtitle"], "price": i["price"]}
+                  for i in items],
+        "total": total,
+    }
 
 
 # ── LLM "API status" panel: per-conversation kill-switch (scoped to one workflow) ─

@@ -5,9 +5,9 @@
 #   make status      what's running
 #   make kill-worker the crash-recovery demo beat (then: make worker)
 #
-# Logs: /tmp/temporal-dev.log /tmp/agent-worker.log /tmp/agent-api.log /tmp/agent-web.log
+# Logs: /tmp/temporal-dev.log /tmp/travel-worker.log /tmp/travel-api.log /tmp/travel-web.log
 
-.PHONY: up down status logs worker api web temporal postgres kill-worker kill-db db
+.PHONY: up down status logs worker api web temporal postgres kill-worker kill-db db seed
 
 up: postgres temporal worker api web
 	@echo ""
@@ -25,18 +25,22 @@ temporal:
 
 worker:
 	@pgrep -f "worker.py" >/dev/null 2>&1 || \
-		(cd python && nohup uv run worker.py > /tmp/agent-worker.log 2>&1 & \
+		(cd python && nohup uv run worker.py > /tmp/travel-worker.log 2>&1 & \
 		 echo "worker started")
 
 api:
 	@pgrep -f "uvicorn gateway:app" >/dev/null 2>&1 || \
-		(cd web && nohup uv run uvicorn gateway:app --port 8000 > /tmp/agent-api.log 2>&1 & \
+		(cd web && nohup uv run uvicorn gateway:app --port 8000 > /tmp/travel-api.log 2>&1 & \
 		 echo "gateway started (:8000)")
 
 web:
 	@pgrep -f "http.server 5173" >/dev/null 2>&1 || \
-		(cd web && nohup python3 -m http.server 5173 > /tmp/agent-web.log 2>&1 & \
+		(cd web && nohup python3 -m http.server 5173 > /tmp/travel-web.log 2>&1 & \
 		 echo "web UI started (:5173)")
+
+# Regenerate the seed dataset (destinations, flights, hotels, attractions).
+seed:
+	python3 db/generate_seed.py
 
 # The money beat: kill the worker mid-conversation, watch the loop freeze,
 # then `make worker` — it resumes on the exact next line.
@@ -71,4 +75,4 @@ status:
 	@printf "web      : "; pgrep -f "http.server 5173" >/dev/null 2>&1 && echo "running (:5173)" || echo "stopped"
 
 logs:
-	@tail -n 20 /tmp/agent-worker.log /tmp/agent-api.log 2>/dev/null
+	@tail -n 20 /tmp/travel-worker.log /tmp/travel-api.log 2>/dev/null

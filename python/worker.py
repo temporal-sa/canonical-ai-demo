@@ -14,8 +14,15 @@ from temporalio.worker import Worker
 import config
 from activities import control
 from activities.llm import call_llm
+from activities.research import (
+    enrich_query,
+    plan_clarifications,
+    plan_searches,
+    web_search,
+    write_report,
+)
 from activities.tools import execute_tool
-from workflows.agent import SupportAgentWorkflow
+from workflows.agent import TravelAgentWorkflow
 
 
 async def main() -> None:
@@ -25,8 +32,16 @@ async def main() -> None:
         worker = Worker(
             client,
             task_queue=config.TASK_QUEUE,
-            workflows=[SupportAgentWorkflow],
-            activities=[call_llm, execute_tool],
+            workflows=[TravelAgentWorkflow],
+            activities=[
+                call_llm,
+                execute_tool,
+                plan_clarifications,
+                enrich_query,
+                plan_searches,
+                web_search,
+                write_report,
+            ],
             activity_executor=activity_executor,
         )
         print(f"worker polling task queue '{config.TASK_QUEUE}' "
