@@ -100,10 +100,6 @@ class LLMStatus(BaseModel):
     down: bool
 
 
-class Clarifications(BaseModel):
-    answers: dict[str, str]
-
-
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 LLM_MODEL = (
     os.getenv("OPENAI_MODEL", "gpt-4o") if LLM_PROVIDER == "openai"
@@ -181,7 +177,7 @@ async def approve(conversation_id: str, body: Approve):
     return {}
 
 
-# ── research_destination: live fan-out progress + clarifying-questions HITL ──
+# ── research_destination: live fan-out progress ──────────────────────────────
 @app.get("/conversations/{conversation_id}/research-status")
 async def research_status(conversation_id: str):
     try:
@@ -193,17 +189,7 @@ async def research_status(conversation_id: str):
         "searchesTotal": s["searches_total"],
         "searchesDone": s["searches_done"],
         "plan": [{"query": p["query"], "reason": p["reason"]} for p in s["plan"]],
-        "questions": s["questions"],
     }
-
-
-@app.post("/conversations/{conversation_id}/clarifications", status_code=202)
-async def clarifications(conversation_id: str, body: Clarifications):
-    try:
-        await _handle(conversation_id).signal("provide_clarifications", body.answers)
-    except RPCError as e:
-        _not_found(e)
-    return {}
 
 
 @app.get("/conversations/{conversation_id}/itinerary")

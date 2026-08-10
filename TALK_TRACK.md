@@ -6,6 +6,40 @@ lines are in quotes so you can practice off them directly.
 
 ---
 
+## Overview
+
+**What this demo is:** A single AI agent for planning a trip — it searches flights, hotels, and sights, reasons over what it already knows, runs live web research, plans multi-step tasks, and books travel with a human's approval. You'll walk the full lifecycle of an agent loop: a simple turn, the loop iterating across several tools, the itinerary as durable workflow state, parallel deep research that survives a dead worker, a durable human-in-the-loop wait, and a business failure it knows not to retry.
+
+**What you're proving to the audience:** An AI agent is just a loop — the model reasons, calls a tool, looks at the result, and repeats. That loop is fragile: it chains LLM calls, tool calls, and human input, and any step can fail. Temporal makes the loop durable by default, so teams stop writing retry logic and state machines and start shipping agent features.
+
+**Three things the audience should walk away believing:**
+
+- Reliability out of the box — the agent survives a dead worker mid-research and a long human wait without re-running finished work or losing the itinerary. Zero recovery code.
+- Ship faster — the agent loop is ordinary Python. Retries, parallel fan-out, human-in-the-loop, and recovery are a line each, not subsystems.
+- Full visibility — every LLM call, tool call, and human input is one event history: an audit log and the agent's memory, for free.
+
+---
+
+
+
+## Personas
+
+**Business Leaders**
+
+- Modernize with agentic AI while your processes survive crashes and outages without losing work or re-spending tokens.
+- Speed up developer velocity — teams focus on the trip-planning logic, not resilience plumbing.
+- Full visibility into every running agent through comprehensive observability.
+
+**Developers**
+
+- Temporal preserves application state; your code recovers from failures and runs to completion.
+- The Temporal UI gives traceability for every call, event, and output.
+- The agent loop is just code — 7 language SDKs, polyglot by design.
+
+---
+
+
+
 ## Before you start
 
 ```bash
@@ -20,14 +54,13 @@ research is live web search, so any place works there.
 
 ---
 
+
+
 ## 1. One turn of the loop
 
 **Tell:**
 
-> "The big idea I want to land today is really simple. An AI agent is just a loop. The
-> model looks at what you asked, it decides to call a tool, it looks at the result, and it
-> answers. That's the whole thing. What makes it interesting is what Temporal does around
-> that loop. So let me start with the simplest possible version."
+> "The big idea I want to land today is actually really simple. An AI agent is just a loop. The model looks at what you asked, it decides to call a tool, it looks at the result, and it answers. That's the whole thing. What makes it interesting is what Temporal does around that loop. So let me start with the simplest possible version."
 
 **Show:** type
 
@@ -47,6 +80,8 @@ Find me flights from New York to Athens on October 3rd.
 > agent's memory."
 
 ---
+
+
 
 ## 2. The loop iterates
 
@@ -70,6 +105,8 @@ Now find a well-located 4-star hotel in Athens for four nights, and a couple of 
 
 ---
 
+
+
 ## 3. Build the itinerary
 
 **Tell:**
@@ -92,6 +129,8 @@ Perfect, add those to my itinerary.
 > it is. Nothing lost."
 
 ---
+
+
 
 ## 4. Deep research, in parallel, and it survives a crash
 
@@ -139,7 +178,7 @@ make worker
 **Show:** type
 
 ```
-Love it, add a few days in Santorini and Mykonos to my itinerary.
+Perfect, add a few days in Santorini and Mykonos to my itinerary.
 ```
 
 **Tell:**
@@ -151,36 +190,9 @@ Love it, add a few days in Santorini and Mykonos to my itinerary.
 
 ---
 
-## 5. The provider goes down
 
-**Tell:**
 
-> "Now let me show you what happens when things go wrong, because in the real world the
-> model provider goes down all the time. I'm going to open demo controls up here and flip
-> this switch to simulate the LLM being unavailable."
-
-**Show:** open **Demo controls** (top right), flip **LLM API** off, then type
-
-```
-Great, now pull the whole thing into a day-by-day plan across Athens, Santorini, and Mykonos.
-```
-
-**Tell:**
-
-> "So it's just sitting there thinking, because this turn needs the model, and the model is
-> down. But notice, the app didn't crash, and nobody got an error. If I pop over to
-> Temporal, you can see it's retrying that call, over and over, backing off each time. Now
-> watch what happens when I bring it back."
-
-**Show:** flip **LLM API** back on.
-
-**Tell:**
-
-> "And there's the answer. The very next retry just went through, and the person using this never saw a thing. The unreliable parts of an agent, the model and the tools, are all activities, and Temporal retries them for me. That is one line of config, not custom retry logic that I had to build."
-
----
-
-## 6. Book it, with a human in the loop
+## 5. Book it, with a human in the loop
 
 **Tell:**
 
@@ -205,7 +217,9 @@ This looks perfect, book the whole trip.
 
 ---
 
-## 7. Knowing what not to retry (optional)
+
+
+## 6. Knowing what not to retry (optional)
 
 **Tell:**
 
@@ -222,23 +236,47 @@ Actually, add that Athens to Santorini flight again and book it.
 **Tell:**
 
 > "And it comes right back and says that flight's already in the trip, it's not going to
-> book it twice. That's a business rule, not a glitch. So compare that to the outage a
-> minute ago. That was temporary, so Temporal just kept retrying until it recovered. This
-> one is never going to succeed, no matter how many times you try, so it fails fast and the
-> agent just explains it. And that difference is one flag on the error.
+> book it twice. That's a business rule, not a glitch. Compare that to something like a
+> network blip or a provider hiccup — that's temporary, so Temporal just keeps retrying
+> until it recovers. This one is never going to succeed, no matter how many times you try,
+> so it fails fast and the agent just explains it. And that difference is one flag on the
+> error.
 >
 > And that's really the whole point. It was the same simple loop the entire way through.
-> And Temporal quietly handled the flaky provider, the parallel research, a full on crash,
-> a long pause waiting on a human, and a failure it knew not to retry. And I never once had
-> to write the resilience code myself."
+> And Temporal quietly handled the parallel research, a full on crash, a long pause waiting
+> on a human, and a failure it knew not to retry. And I never once had to write the
+> resilience code myself."
 
 ---
 
-## Reset between runs
 
-- A new conversation, or just refreshing the page, gives you a fresh workflow.
-- The itinerary, the bookings, and the LLM toggle are all per conversation, so they reset
-on their own. Nothing to restart between demos.
+
+## Close
+
+Three takeaways:
+
+- Reliability out of the box — the agent survived a dead worker mid-research and a long wait without re-running finished work.
+- Ship faster — teams write trip logic, not retry queues and state machines.
+- Full visibility — every LLM call, event, and output in one place for understanding and debugging. Works with Anthropic, OpenAI, any model provider.
+
+---
+
+
+
+## Q&A & Troubleshooting
+
+- **"Did the crash really lose nothing?"** — Correct. The finished searches stayed finished and weren't re-run; only the in-flight ones retried. The itinerary is workflow state, so it came back intact — no recovery code.
+- **"Does the waiting cost money / hold resources?"** — No — a parked workflow holds nothing; it's not a thread or a held connection. It wakes on the signal. That's the "wait days for free" claim, literally.
+- **"How does the parallel research work?"** — The agent fans out several web searches as activities and awaits them together. Temporal tracks each one, so a crash resumes only the unfinished ones.
+- **"Where's the agent's memory?"** — The workflow's event history is the memory — no external store, and it survives crashes and restarts.
+- **"Retryable vs non-retryable?"** — Transient errors (a dead worker, a network blip, an LLM outage) retry automatically; business errors (flight already in the trip) are marked non-retryable and fail fast. One flag on the error.
+- **"What about a flaky LLM provider?"** — Same mechanism. Model calls are activities, so rate limits and 5xx retry with backoff and the user never sees an error.
+- **"How do I add a tool?"** — A tool schema, the tool's implementation, and one dispatch line — zero workflow changes.
+- **"Isn't this tied to one model provider?"** — No. Works with Anthropic, OpenAI, any provider; the loop is just code, across 7 SDKs.
+
+---
+
+
 
 ## If a prompt stalls
 
@@ -246,6 +284,16 @@ on their own. Nothing to restart between demos.
 Athens / Santorini / Mykonos.
 - "That airline isn't available": the model won't invent flights, so just say "the cheapest one."
 - If a query hangs, run `make status`, and if the worker is down, `make worker`.
+
+---
+
+
+
+## Reset between runs
+
+- A new conversation, or just refreshing the page, gives you a fresh workflow.
+- The itinerary, the bookings, and the LLM toggle are all per conversation, so they reset
+on their own. Nothing to restart between demos.
 
 > **Shorter alternate opener (travel for an event):** "I'd like to travel for an event." then
 > "Athens in September", which finds real events, then flights, then an invoice. It's a

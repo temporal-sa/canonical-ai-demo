@@ -152,25 +152,6 @@
   .approval-card .conf-args { margin: 0 0 10px; padding: 10px 12px; background: rgba(255, 255, 255, .04); border: 1px solid var(--border); border-radius: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; color: var(--text-soft); white-space: pre-wrap; overflow-x: auto; }
   .approval-card .conf-note { color: var(--muted); font-size: 12.5px; }
 
-  /* ── clarifying-questions card (research_destination HITL) ── */
-  .clarify-card {
-    align-self: flex-start; max-width: 80%;
-    background: linear-gradient(145deg, var(--panel), rgba(130, 87, 232, .06));
-    border: 1px solid rgba(167, 139, 250, .2); border-left: 3px solid var(--purple-bright);
-    border-radius: 18px; padding: 17px 19px; box-shadow: 0 14px 35px rgba(0, 0, 0, .18);
-  }
-  .clarify-card .title { font-weight: 620; margin-bottom: 4px; }
-  .clarify-card .desc { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
-  .clarify-card .fields { display: flex; flex-direction: column; gap: 11px; margin-bottom: 15px; }
-  .clar-field { display: flex; flex-direction: column; gap: 6px; }
-  .clar-field span { color: var(--text-soft); font-size: 13px; }
-  .clar-field input {
-    background: rgba(255, 255, 255, .035); border: 1px solid var(--border); border-radius: 11px;
-    padding: 9px 12px; color: var(--text); font: inherit; font-size: 14px; outline: none;
-    transition: border-color .16s ease;
-  }
-  .clar-field input:focus { border-color: rgba(167, 139, 250, .45); }
-
   /* ── research_destination progress card (phase stages + per-search spinners) ── */
   .progress-card {
     align-self: flex-start; max-width: 80%;
@@ -271,7 +252,7 @@
     .controls-scroll { padding: 24px 20px 20px; }
     main { padding: 58px 15px 22px; }
     #hero { margin-top: 18px; } #hero h1 { font-size: 30px; }
-    .msg, .approval-card, .clarify-card, .progress-card { max-width: 91%; }
+    .msg, .approval-card, .progress-card { max-width: 91%; }
     footer { padding: 11px 14px 16px; }
     #composer { border-radius: 16px; padding-left: 16px; }
   }
