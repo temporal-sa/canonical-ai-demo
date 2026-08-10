@@ -137,7 +137,7 @@ function showError(message) {
 // ── research_destination: live fan-out progress card ─────────────────────────
 // While a turn is in flight (the send_message update blocks server-side through
 // the whole research pass), poll the workflow's research_status and render a
-// progress card: phase stages (clarify → plan → search → write) each with a
+// progress card: phase stages (plan → search → write) each with a
 // spinner/check, plus the search plan with a spinner per parallel search that
 // flips to ✓ as each activity completes.
 let statusTimer = null;
@@ -225,55 +225,7 @@ function startStatusPolling() {
 
 function stopStatusPolling() {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
-  removeProgress();  // the guide/clarify card takes over from here
-}
-
-// ── clarifying-questions card (the research_destination HITL moment) ─────────
-function showClarifyCard(questions) {
-  const qs = (questions && questions.length)
-    ? questions : ['Anything specific you want me to focus on?'];
-  const card = document.createElement('div');
-  card.className = 'clarify-card';
-  card.innerHTML = `
-    <div class="title">A couple of quick questions</div>
-    <div class="desc">Answering sharpens the research — leave blank to skip.</div>
-    <div class="fields"></div>
-    <button class="pill submit-clar">Start research</button>`;
-  const fields = card.querySelector('.fields');
-  qs.forEach((q) => {
-    const wrap = document.createElement('label');
-    wrap.className = 'clar-field';
-    const lab = document.createElement('span'); lab.textContent = q;
-    const inp = document.createElement('input'); inp.type = 'text'; inp.dataset.q = q;
-    wrap.append(lab, inp);
-    fields.append(wrap);
-  });
-  card.querySelector('.submit-clar').onclick = () => submitClarifications(card);
-  $('chat').appendChild(card);
-  card.scrollIntoView({ behavior: 'smooth' });
-  const first = card.querySelector('input');
-  if (first) first.focus();
-}
-
-async function submitClarifications(card) {
-  const answers = {};
-  card.querySelectorAll('input').forEach((inp) => { answers[inp.dataset.q] = inp.value.trim(); });
-  card.querySelectorAll('input, button').forEach((el) => (el.disabled = true));
-  try {
-    const { messages } = await call('GET', `/conversations/${conversationId}/transcript`);
-    const baseline = messages.filter((m) => m.role === 'assistant').length;
-    await call('POST', `/conversations/${conversationId}/clarifications`, { answers });
-    card.remove();
-    setBusy(true, 'planning research…');
-    startStatusPolling();
-    await pollUntilSettled(baseline);
-  } catch (e) {
-    showError(e.message);
-    card.querySelectorAll('input, button').forEach((el) => (el.disabled = false));
-  } finally {
-    stopStatusPolling();
-    refreshItinerary();
-  }
+  removeProgress();  // the guide takes over from here
 }
 
 // ── itinerary (workflow-durable; refreshed after every turn) ─────────────────
@@ -427,11 +379,6 @@ async function runTurn(text) {
     const r = await call('POST', `/conversations/${conversationId}/messages`, { text });
     stopStatusPolling();
     setBusy(false);
-    if (r.status === 'awaiting_clarifications') {
-      const s = await call('GET', `/conversations/${conversationId}/research-status`);
-      showClarifyCard(s.questions);
-      return;  // the guide arrives after the traveller answers (see submitClarifications)
-    }
     if (r.reply) addMsg('assistant', r.reply);  // research guides arrive here too
     if (r.status === 'awaiting_approval') {
       const { pending } = await call('GET', `/conversations/${conversationId}/pending-approval`);

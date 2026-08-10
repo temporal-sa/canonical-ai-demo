@@ -55,7 +55,7 @@ Everything else is supporting cast:
 | `python/activities/llm.py` | The LLM call as an Activity (Anthropic or OpenAI). Temporal owns retries. |
 | `python/activities/tools.py` | Tool dispatch → the SQL functions. |
 | `python/activities/db.py` | Plain parametrized SQL over the travel dataset. |
-| `python/activities/research.py` | The `research_destination` pipeline steps (clarify / plan / web-search / write). |
+| `python/activities/research.py` | The `research_destination` pipeline steps (plan / web-search / write). |
 | `python/prompts.py` | The system prompt + tool definitions + research prompts. |
 | `web/gateway.py` | A thin HTTP gateway that drives the workflow by string name. |
 | `web/index.html` + `web/app.js` | The chat UI (vanilla JS, no build step). |
@@ -73,7 +73,7 @@ Everything else is supporting cast:
 3. **Human-in-the-loop pauses.** `create_invoice` and `book_trip` park the
    workflow on a confirmation (`await workflow.wait_condition`) — the pause is
    **durable**, surviving worker restarts. The UI shows the tool name + args +
-   Confirm. Same mechanism gates `research_destination`'s clarifying questions.
+   Confirm.
 4. **Retries you didn't write.** LLM and tool calls are Activities with explicit
    `RetryPolicy`. A rate-limit or a DB blip just retries with backoff and
    recovers. A **non-retryable** business decline (booking the same flight twice)
@@ -139,6 +139,106 @@ make db            # …and the next retry just succeeds
 
 Or open **Demo controls** (top-right) and flip the **LLM API** switch to simulate
 a provider outage — the current turn's LLM calls retry until you flip it back.
+
+---
+
+## Extending it to your own demo
+
+The agent loop in `python/workflows/agent.py` is fixed and domain-free — **you
+don't edit it.** To build a new agent you change three things: the **tools**
+(what it can do), the **data** (what backs them), and — only for tools that need
+a human gate or produce the final answer — **one line in a registry.**
+
+### The mental model: a tool is just a function
+
+Every tool call flows through `_dispatch`, which runs it by its *behavior*:
+
+| Behavior | What happens | Register it? | Example |
+|----------|--------------|--------------|---------|
+| **plain** | run it, hand the result back to the model | no | every `search_*` tool |
+| **gated** | pause for a human to approve, then run | yes | `book_trip`, `create_invoice` |
+| **terminal** | the tool's output *is* the answer; stop looping | yes | `research_destination` |
+| **durable state** | mutate workflow state (e.g. the itinerary) | yes | `add_to_itinerary` |
+
+Plain tools are the common case and need **zero** wiring in the loop.
+
+### Add a plain tool (the 90% case)
+
+Three edits, none of them in `agent.py`. Say you want `search_restaurants`:
+
+**1. Declare it** — add to `TOOLS` in `python/prompts.py` (and mention it in `system_prompt()`):
+
+```python
+{
+    "name": "search_restaurants",
+    "description": "Find restaurants at a destination, optionally by cuisine.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "destination": {"type": "string"},
+            "cuisine": {"type": "string", "description": "optional"},
+        },
+        "required": ["destination"],
+    },
+},
+```
+
+**2. Dispatch it** — one branch in `execute_tool` in `python/activities/tools.py`:
+
+```python
+elif name == "search_restaurants":
+    result = db.search_restaurants(args["destination"], args.get("cuisine"))
+```
+
+**3. Back it with data** — a function in `python/activities/db.py`. Return a plain
+`list`/`dict`; it's JSON-serialized for the model automatically. This is also where
+you'd call a **real API or web search instead of SQL** — a tool is just a function:
+
+```python
+def search_restaurants(destination, cuisine=None):
+    ...
+    return rows  # list[dict]
+```
+
+Restart the worker (`make kill-worker && make worker`) and the model can use it.
+The loop never changed.
+
+### Add a tool with special behavior
+
+For gated / terminal / stateful tools, add a handler method to `TravelAgentWorkflow`
+and register it in `self._handlers` (in `__init__`). Each handler is
+`async (ToolCall) -> ToolOutcome`:
+
+- **Gated** (human approval): set `self.pending_confirmation`, `await
+  self._await_confirmation()`, then act. Copy `_h_book_trip` / `_h_create_invoice`.
+- **Terminal** (output is the answer): `return ToolOutcome(result=..., terminal=True,
+  assistant_text=...)`. Copy `_h_research`.
+- **Durable state**: mutate workflow fields (like `self.itinerary`) — durable, no DB
+  table needed. Copy `_h_add_to_itinerary`.
+
+### Swap the whole domain (a brand-new use case)
+
+The Temporal machinery — the loop, retries, the durable approval gate, and the
+parallel research fan-out — carries over unchanged. To re-theme to, say, an
+IT-support or insurance agent:
+
+1. **Rewrite `system_prompt()` and `TOOLS`** in `python/prompts.py`.
+2. **Replace the `db.py` functions** — point them at your seed, a real API, or web search.
+3. **Reseed or drop the DB** — edit `db/generate_seed.py` and `make seed`, or if your
+   tools call live APIs, skip the DB entirely.
+4. **Update `self._handlers`** for any approval-gated or terminal tools in your flow.
+5. *(optional)* **Rename** the workflow / task queue / conversation prefix via
+   `WORKFLOW_TYPE` and `TASK_QUEUE` (env — see `web/gateway.py` and `python/config.py`)
+   and the `@workflow.defn` class name.
+
+### Two rules that keep it durable
+
+- **Do all I/O in activities, never in the workflow.** `agent.py` must stay
+  deterministic — network calls, DB access, randomness, and clocks belong in
+  `activities/`. That determinism is what makes replay and crash-recovery work.
+- **Keep stable IDs for anything the user collects or commits.** The itinerary and the
+  "can't book the same flight twice" rule rely on stable, referenceable IDs — a reason
+  to keep those catalogs seeded rather than pulled fresh from web search on every call.
 
 ---
 

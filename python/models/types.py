@@ -49,13 +49,12 @@ class ApprovalDecision(BaseModel):
 
 
 class TurnResult(BaseModel):
-    status: Literal["reply", "awaiting_approval", "awaiting_clarifications"]
+    status: Literal["reply", "awaiting_approval"]
     reply: str
 
 
-# ── destination research pipeline (clarify → plan → fan-out search → write) ───
-# One research pass is: optionally ask a few clarifying questions, fold the
-# answers into a sharper brief, plan N focused searches, run them in PARALLEL as
+# ── destination research pipeline (plan → fan-out search → write) ─────────────
+# One research pass is: plan N focused searches, run them in PARALLEL as
 # activities, then synthesize a cited destination guide.
 class SearchItem(BaseModel):
     query: str
@@ -66,16 +65,6 @@ class SearchPlan(BaseModel):
     searches: list[SearchItem] = Field(default_factory=list)
 
 
-class ClarifyResult(BaseModel):
-    needs_clarification: bool
-    questions: list[str] = Field(default_factory=list)
-
-
-class EnrichRequest(BaseModel):
-    query: str
-    answers: dict[str, str] = Field(default_factory=dict)
-
-
 class WriteRequest(BaseModel):
     brief: str
     findings: list[str]
@@ -84,21 +73,14 @@ class WriteRequest(BaseModel):
 class ReportData(BaseModel):
     short_summary: str
     markdown_report: str
-    follow_up_questions: list[str] = Field(default_factory=list)
-
-
-class PendingClarification(BaseModel):
-    """Human-in-the-loop pause: the questions the agent is waiting on."""
-    questions: list[str] = Field(default_factory=list)
 
 
 class ResearchStatus(BaseModel):
     """Live view the UI polls to watch the research fan-out unfold."""
-    phase: str = "idle"           # idle · clarifying · planning · searching · writing
+    phase: str = "idle"           # idle · planning · searching · writing
     plan: list[SearchItem] = Field(default_factory=list)
     searches_total: int = 0
     searches_done: int = 0
-    questions: list[str] = Field(default_factory=list)
 
 
 # ── itinerary (workflow-durable, conversation-scoped) ────────────────────────

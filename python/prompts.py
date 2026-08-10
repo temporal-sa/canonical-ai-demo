@@ -310,34 +310,10 @@ TOOLS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # research_destination pipeline prompts + JSON schemas.
 #
-# Native Claude, no agent framework: the "clarifier", "planner", and "writer"
-# are just system prompts + a forced JSON-schema response (structured outputs).
-# The "searcher" is a plain message with Claude's built-in web_search tool.
+# Native Claude, no agent framework: the "planner" and "writer" are just system
+# prompts + a forced JSON-schema response (structured outputs). The "searcher"
+# is a plain message with Claude's built-in web_search tool.
 # ─────────────────────────────────────────────────────────────────────────────
-
-CLARIFY_SYSTEM = """You are a travel research intake assistant. Given a traveller's \
-request to research a destination or trip, decide whether a couple of short clarifying \
-questions would materially improve the research (e.g. travel dates or season, trip \
-length, interests, budget level, travel style, who's going).
-
-- Ask AT MOST 3 questions, only if they genuinely sharpen the work.
-- If the request is already specific enough, ask nothing.
-- Questions must be short and answerable in a sentence."""
-
-CLARIFY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "needs_clarification": {"type": "boolean"},
-        "questions": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["needs_clarification", "questions"],
-    "additionalProperties": False,
-}
-
-
-ENRICH_SYSTEM = """You turn a travel research request plus the traveller's answers to \
-clarifying questions into a single, sharp research brief — one or two sentences a travel \
-research team could act on directly. Return only the brief."""
 
 
 def plan_system(count: int) -> str:
@@ -387,16 +363,14 @@ cohesive destination guide.
 paragraphs, and a table of highlights — e.g. attractions, neighborhoods, or costs — \
 where useful). Aim for 250–400 words. Ground every claim in the findings; do not \
 invent facts.
-- short_summary: 2–3 sentences a reader could skim first.
-- follow_up_questions: 3 natural next questions the traveller might ask."""
+- short_summary: 2–3 sentences a reader could skim first."""
 
 WRITE_SCHEMA = {
     "type": "object",
     "properties": {
         "short_summary": {"type": "string"},
         "markdown_report": {"type": "string"},
-        "follow_up_questions": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["short_summary", "markdown_report", "follow_up_questions"],
+    "required": ["short_summary", "markdown_report"],
     "additionalProperties": False,
 }
