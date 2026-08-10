@@ -181,7 +181,7 @@ async def write_report(req: WriteRequest) -> ReportData:
     await _guard()
     findings = "\n\n".join(req.findings)
     user = f"Research brief:\n{req.brief}\n\nFindings from web searches:\n\n{findings}"
-    data = await _structured(prompts.WRITE_SYSTEM, user, prompts.WRITE_SCHEMA, max_tokens=1024, effort="low")
+    data = await _structured(prompts.WRITE_SYSTEM, user, prompts.WRITE_SCHEMA, max_tokens=2500, effort="low")
     return ReportData(
         short_summary=data.get("short_summary", ""),
         markdown_report=data.get("markdown_report", ""),
