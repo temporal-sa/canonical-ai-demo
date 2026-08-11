@@ -15,8 +15,6 @@ import config
 from activities import control
 from activities.llm import call_llm
 from activities.research import (
-    enrich_query,
-    plan_clarifications,
     plan_searches,
     web_search,
     write_report,
@@ -36,8 +34,6 @@ async def main() -> None:
             activities=[
                 call_llm,
                 execute_tool,
-                plan_clarifications,
-                enrich_query,
                 plan_searches,
                 web_search,
                 write_report,

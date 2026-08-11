@@ -1,8 +1,8 @@
 """The research_destination pipeline's LLM steps, each a Temporal Activity.
 
 Native Claude — no agent framework. Two shapes:
-  • structured steps (clarify / enrich / plan / write) force a JSON-schema
-    response via `output_config.format` and parse it.
+  • structured steps (plan / write) force a JSON-schema response via
+    `output_config.format` and parse it.
   • the search step hands Claude its built-in `web_search` server tool and
     collects the summary it writes. This is the demo's LIVE data: destination
     intelligence comes off the real web, while flights/hotels are seeded.
@@ -28,8 +28,6 @@ import config
 import prompts
 from . import control
 from models.types import (
-    ClarifyResult,
-    EnrichRequest,
     ReportData,
     SearchItem,
     SearchPlan,
@@ -87,44 +85,6 @@ async def _structured(system: str, user: str, schema: dict,
         ) from e
     text = "".join(b.text for b in resp.content if b.type == "text")
     return json.loads(text)
-
-
-async def _text(system: str, user: str, max_tokens: int = 1024, effort: str = "low") -> str:
-    try:
-        async with _client() as client:
-            resp = await client.messages.create(
-                model=config.ANTHROPIC_MODEL,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-                output_config={"effort": effort},
-            )
-    except _FATAL as e:
-        raise ApplicationError(
-            f"LLM request rejected: {e}", type="LLMFatalError", non_retryable=True
-        ) from e
-    return "".join(b.text for b in resp.content if b.type == "text").strip()
-
-
-# ── clarify (human-in-the-loop) ──────────────────────────────────────────────
-@activity.defn
-async def plan_clarifications(query: str) -> ClarifyResult:
-    await _guard()
-    data = await _structured(prompts.CLARIFY_SYSTEM, query, prompts.CLARIFY_SCHEMA)
-    return ClarifyResult(
-        needs_clarification=bool(data.get("needs_clarification")) and bool(data.get("questions")),
-        questions=data.get("questions", [])[:3],
-    )
-
-
-@activity.defn
-async def enrich_query(req: EnrichRequest) -> str:
-    await _guard()
-    if not req.answers:
-        return req.query
-    qa = "\n".join(f"Q: {q}\nA: {a}" for q, a in req.answers.items())
-    user = f"Original request:\n{req.query}\n\nClarifications:\n{qa}"
-    return await _text(prompts.ENRICH_SYSTEM, user)
 
 
 # ── plan ─────────────────────────────────────────────────────────────────────
@@ -197,5 +157,4 @@ async def write_report(req: WriteRequest) -> ReportData:
     return ReportData(
         short_summary=data.get("short_summary", ""),
         markdown_report=data.get("markdown_report", ""),
-        follow_up_questions=data.get("follow_up_questions", [])[:3],
     )
