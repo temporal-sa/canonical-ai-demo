@@ -50,6 +50,13 @@ WEB_SEARCH_MAX_USES = int(os.getenv("WEB_SEARCH_MAX_USES", "1"))
 # watch WITHOUT much extra wall-clock (bounded by the slowest single search).
 RESEARCH_SEARCHES = int(os.getenv("RESEARCH_SEARCHES", "6"))
 
+# Demo chaos: probability (0.0–1.0) that a single web_search activity randomly
+# fails with a RETRYABLE error. Because the searches fan out in parallel, a modest
+# rate means a couple of them will visibly retry (with backoff) in the workflow
+# history while the rest sail through — a live demonstration of Temporal owning
+# retries. Set to 0 to disable.
+WEB_SEARCH_FAIL_RATE = float(os.getenv("WEB_SEARCH_FAIL_RATE", "0.3"))
+
 # (The HTTP gateway + web UI live in web/ — see web/gateway.py. This folder is
 #  worker-only: workflow, activities, and the config they need.)
 

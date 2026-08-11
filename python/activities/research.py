@@ -18,6 +18,7 @@ ride out the outage and recover.
 """
 
 import json
+import random
 
 import anthropic
 from temporalio import activity
@@ -143,6 +144,17 @@ async def web_search(item: SearchItem) -> str:
     that hadn't completed re-run on restart — finished ones are already in the
     workflow history."""
     await _guard()
+
+    # Demo chaos: sometimes a search just flakes. Raise a RETRYABLE error so
+    # Temporal retries this single activity (with backoff) while its siblings in
+    # the fan-out keep going — the retry shows in the workflow history. Only the
+    # first attempt rolls the dice; retries always proceed so the fan-out finishes.
+    if activity.info().attempt == 1 and random.random() < config.WEB_SEARCH_FAIL_RATE:
+        raise ApplicationError(
+            f"web_search transient failure (simulated) for {item.query!r}",
+            type="WebSearchFlaky",
+        )
+
     user = (
         f"Search query: {item.query}\n"
         f"Why this matters: {item.reason}\n\n"
