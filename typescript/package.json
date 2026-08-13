@@ -1,0 +1,25 @@
+{
+  "name": "travel-agent-ts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript worker for the canonical Temporal travel-agent demo. Implements the SDK contract in ../CONTRACT.md.",
+  "scripts": {
+    "worker": "ts-node src/worker.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "~0.116.0",
+    "@temporalio/activity": "~1.22.0",
+    "@temporalio/client": "~1.22.0",
+    "@temporalio/worker": "~1.22.0",
+    "@temporalio/workflow": "~1.22.0",
+    "dotenv": "~17.4.2",
+    "pg": "~8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "~22.10.0",
+    "@types/pg": "^8.21.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.0"
+  }
+}

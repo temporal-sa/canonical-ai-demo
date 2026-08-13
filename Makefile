@@ -1,78 +1,22 @@
-# One-command local demo stack.
+# Multi-SDK demo. Each SDK has its own Makefile that brings up the full local
+# stack with THAT SDK's worker (shared infra lives in make/common.mk):
 #
-#   make up          start everything → open http://localhost:5173
-#   make down        stop everything
-#   make status      what's running
-#   make kill-worker the crash-recovery demo beat (then: make worker)
+#   cd python     && make up      # the primary/deployable SDK
+#   cd typescript && make up       # local-only TS worker
 #
-# Logs: /tmp/temporal-dev.log /tmp/travel-worker.log /tmp/travel-api.log /tmp/travel-web.log
+# For convenience, running make FROM THE REPO ROOT forwards to the Python SDK,
+# so the familiar commands still work unchanged:
+#
+#   make up  / make down / make status / make kill-worker / make kill-db  → python/
+#
+# Only ONE SDK's worker may poll the `travel-agent` queue at a time (a history
+# written by one SDK can't be replayed by another). Switch SDKs from their
+# folders: `cd python && make kill-worker` then `cd typescript && make up`.
 
-.PHONY: up down status logs worker api web temporal postgres kill-worker kill-db db seed
+.DEFAULT_GOAL := up
 
-up: postgres temporal worker api web
-	@echo ""
-	@echo "  chat UI      → http://localhost:5173"
-	@echo "  temporal UI  → http://localhost:8233"
-	@echo "  gateway      → http://localhost:8000"
+# Forward every root target to python/Makefile.
+up down status logs worker kill-worker api web temporal postgres kill-db db seed deps:
+	@$(MAKE) --no-print-directory -C python $@
 
-postgres:
-	docker compose up -d
-
-temporal:
-	@pgrep -f "temporal server start-dev" >/dev/null 2>&1 || \
-		(nohup temporal server start-dev --ui-port 8233 > /tmp/temporal-dev.log 2>&1 & \
-		 sleep 3 && echo "temporal dev server started (UI :8233)")
-
-worker:
-	@pgrep -f "worker.py" >/dev/null 2>&1 || \
-		(cd python && nohup uv run worker.py > /tmp/travel-worker.log 2>&1 & \
-		 echo "worker started")
-
-api:
-	@pgrep -f "uvicorn gateway:app" >/dev/null 2>&1 || \
-		(cd web && nohup uv run uvicorn gateway:app --port 8000 > /tmp/travel-api.log 2>&1 & \
-		 echo "gateway started (:8000)")
-
-web:
-	@pgrep -f "http.server 5173" >/dev/null 2>&1 || \
-		(cd web && nohup python3 -m http.server 5173 > /tmp/travel-web.log 2>&1 & \
-		 echo "web UI started (:5173)")
-
-# Regenerate the seed dataset (destinations, flights, hotels, attractions).
-seed:
-	python3 db/generate_seed.py
-
-# The money beat: kill the worker mid-conversation, watch the loop freeze,
-# then `make worker` — it resumes on the exact next line.
-kill-worker:
-	-pkill -f "worker.py"
-	@echo "worker killed — restart with: make worker"
-
-# The retry beat (slide 31): kill the DATABASE mid-conversation. The tool
-# activity fails, Temporal retries it with backoff (watch the UI), then
-# `make db` brings it back and the next retry just... succeeds.
-kill-db:
-	docker kill postgres
-	@echo "database killed — the agent survives this. restore with: make db"
-
-db:
-	docker start postgres
-	@echo "database back — the retrying activity will succeed on its next attempt"
-
-down:
-	-pkill -f "worker.py"
-	-pkill -f "uvicorn gateway:app"
-	-pkill -f "http.server 5173"
-	-pkill -f "temporal server start-dev"
-	docker compose down
-	@echo "all stopped"
-
-status:
-	@printf "postgres : "; docker compose ps --format '{{.Status}}' postgres 2>/dev/null || echo "stopped"
-	@printf "temporal : "; pgrep -f "temporal server start-dev" >/dev/null 2>&1 && echo "running (:7233, UI :8233)" || echo "stopped"
-	@printf "worker   : "; pgrep -f "worker.py" >/dev/null 2>&1 && echo "running" || echo "stopped"
-	@printf "gateway  : "; pgrep -f "uvicorn gateway:app" >/dev/null 2>&1 && echo "running (:8000)" || echo "stopped"
-	@printf "web      : "; pgrep -f "http.server 5173" >/dev/null 2>&1 && echo "running (:5173)" || echo "stopped"
-
-logs:
-	@tail -n 20 /tmp/travel-worker.log /tmp/travel-api.log 2>/dev/null
+.PHONY: up down status logs worker kill-worker api web temporal postgres kill-db db seed deps
