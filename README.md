@@ -34,6 +34,23 @@ travel — the Temporal primitives it teaches are identical.
 
 ---
 
+## SDKs
+
+The worker (the durable agent) can be written in any Temporal SDK, while the
+gateway + web UI stay the same — see [`CONTRACT.md`](CONTRACT.md) for the
+SDK-agnostic spec. Each SDK is a self-contained folder with its own runbook and
+its own `make up`:
+
+| SDK | Runbook | Notes |
+|-----|---------|-------|
+| Python | [`python/README.md`](python/README.md) | reference implementation; the only one that also deploys (`docker/`) |
+| TypeScript | [`typescript/README.md`](typescript/README.md) | local-runnable only; Anthropic-only |
+
+Only **one** SDK's worker polls the shared `travel-agent` queue at a time. Root
+`make up` runs the Python SDK; `cd typescript && make up` runs that one instead.
+
+---
+
 ## The one file to read
 
 `python/workflows/agent.py` **is** the demo. The agentic loop is just a `while`

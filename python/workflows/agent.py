@@ -284,7 +284,7 @@ class TravelAgentWorkflow:
         plan: SearchPlan = await workflow.execute_activity(
             plan_searches, query,
             start_to_close_timeout=timedelta(seconds=90),
-            retry_policy=LLM_RETRY, summary="plan",
+            retry_policy=LLM_RETRY,
         )
         self.plan = plan.searches
         self.searches_total = len(self.plan)
@@ -298,7 +298,7 @@ class TravelAgentWorkflow:
             result = await workflow.execute_activity(
                 web_search, item,
                 start_to_close_timeout=timedelta(seconds=120),
-                retry_policy=LLM_RETRY, summary="web_search",
+                retry_policy=LLM_RETRY,
             )
             self.searches_done += 1
             return result
@@ -309,7 +309,7 @@ class TravelAgentWorkflow:
         report: ReportData = await workflow.execute_activity(
             write_report, WriteRequest(brief=query, findings=list(findings)),
             start_to_close_timeout=timedelta(seconds=180),
-            retry_policy=LLM_RETRY, summary="synthesize",
+            retry_policy=LLM_RETRY,
         )
         self.phase = "idle"
         return report
@@ -388,7 +388,7 @@ class TravelAgentWorkflow:
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=book_call, account_key=self.account_key),
             start_to_close_timeout=timedelta(seconds=30),
-            retry_policy=TOOL_RETRY, summary="book_trip",
+            retry_policy=TOOL_RETRY, summary=book_call.name,
         )
         self.itinerary = []  # booked → clear the itinerary
         return ToolOutcome(result=result)
@@ -416,7 +416,7 @@ class TravelAgentWorkflow:
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=invoice_call, account_key=self.account_key),
             start_to_close_timeout=timedelta(seconds=30),
-            retry_policy=TOOL_RETRY, summary="create_invoice",
+            retry_policy=TOOL_RETRY, summary=invoice_call.name,
         )
         return ToolOutcome(result=result)
 
