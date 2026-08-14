@@ -9,7 +9,11 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 load_dotenv()
 
-TASK_QUEUE = "travel-agent"
+# Task queue — env-overridable so the demo-cloud registry's "crashable
+# workspace" feature can hand each attendee an isolated queue (it injects
+# TEMPORAL_TASK_QUEUE=<base>-<workspace-id> into the worker + app). Falls back to
+# the legacy TASK_QUEUE, then the shared default for local/always-on runs.
+TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel-agent")
 
 # Temporal connection — local dev server by default; Temporal Cloud via env.
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
