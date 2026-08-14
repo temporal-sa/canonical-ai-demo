@@ -10,7 +10,10 @@ import { Client, Connection } from '@temporalio/client';
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 dotenv.config();
 
-export const TASK_QUEUE = process.env.TASK_QUEUE ?? 'travel-agent';
+// TEMPORAL_TASK_QUEUE is what the demo-cloud registry's crashable-workspace
+// feature injects (<base>-<workspace-id>); fall back to legacy TASK_QUEUE, then
+// the shared default. Mirrors python/config.py.
+export const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? process.env.TASK_QUEUE ?? 'travel-agent';
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
 export const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 
