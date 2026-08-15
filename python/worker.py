@@ -13,6 +13,15 @@ from temporalio.worker import Worker
 
 import config
 from activities import control
+from activities.checkout import (
+    book_activity,
+    book_flight,
+    book_hotel,
+    cancel_activity,
+    cancel_flight,
+    cancel_hotel,
+    finalize_checkout,
+)
 from activities.llm import call_llm
 from activities.research import (
     plan_searches,
@@ -21,6 +30,7 @@ from activities.research import (
 )
 from activities.tools import execute_tool
 from workflows.agent import TravelAgentWorkflow
+from workflows.checkout import CheckoutWorkflow
 
 
 async def main() -> None:
@@ -30,13 +40,20 @@ async def main() -> None:
         worker = Worker(
             client,
             task_queue=config.TASK_QUEUE,
-            workflows=[TravelAgentWorkflow],
+            workflows=[TravelAgentWorkflow, CheckoutWorkflow],
             activities=[
                 call_llm,
                 execute_tool,
                 plan_searches,
                 web_search,
                 write_report,
+                book_flight,
+                book_hotel,
+                book_activity,
+                cancel_flight,
+                cancel_hotel,
+                cancel_activity,
+                finalize_checkout,
             ],
             activity_executor=activity_executor,
         )

@@ -58,6 +58,36 @@ export interface ItineraryItem {
   price: number;
 }
 
+// ── durable checkout (agent → child workflow) ───────────────────────────────
+export interface CheckoutRequest {
+  account_key: string;
+  items: ItineraryItem[];
+  summary: string;
+}
+
+export interface CheckoutStepRequest {
+  account_key: string;
+  item: ItineraryItem;
+}
+
+export interface CheckoutReservation {
+  kind: ItineraryItem['kind'];
+  ref_id: number;
+  title: string;
+  reservation_id: string;
+  status: 'booked' | 'cancelled';
+}
+
+export interface CheckoutResult {
+  status: 'booked' | 'compensated';
+  message: string;
+  workflow_id: string;
+  reservations: CheckoutReservation[];
+  compensations: CheckoutReservation[];
+  failure?: string;
+  booking_id?: number;
+}
+
 // ── activity-boundary DTOs (internal to the TS worker; never cross to the
 //    gateway, so plain field names are fine — they mirror models/types.py). ──
 

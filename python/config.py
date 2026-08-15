@@ -61,6 +61,14 @@ RESEARCH_SEARCHES = int(os.getenv("RESEARCH_SEARCHES", "6"))
 # retries. Set to 0 to disable.
 WEB_SEARCH_FAIL_RATE = float(os.getenv("WEB_SEARCH_FAIL_RATE", "0.3"))
 
+# Durable checkout demo. The default intentionally fails the hotel step after
+# the flight is reserved so CheckoutWorkflow visibly compensates by cancelling
+# the flight. Disable it to exercise the successful commit path.
+CHECKOUT_FAIL_HOTEL = os.getenv("CHECKOUT_FAIL_HOTEL", "true").lower() in (
+    "1", "true", "yes", "on",
+)
+CHECKOUT_STEP_DELAY_SECONDS = float(os.getenv("CHECKOUT_STEP_DELAY_SECONDS", "1.0"))
+
 # (The HTTP gateway + web UI live in web/ — see web/gateway.py. This folder is
 #  worker-only: workflow, activities, and the config they need.)
 

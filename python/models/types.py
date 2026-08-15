@@ -97,3 +97,36 @@ class ItineraryItem(BaseModel):
     @property
     def item_id(self) -> str:
         return f"{self.kind}-{self.ref_id}"
+
+
+# ── durable checkout (agent → child workflow) ───────────────────────────────
+# The agent decides *when* to check out. Checkout itself is a deterministic
+# business process: reserve each item in order and compensate in reverse order
+# if a later reservation fails.
+class CheckoutRequest(BaseModel):
+    account_key: str
+    items: list[ItineraryItem]
+    summary: str
+
+
+class CheckoutStepRequest(BaseModel):
+    account_key: str
+    item: ItineraryItem
+
+
+class CheckoutReservation(BaseModel):
+    kind: Literal["flight", "hotel", "activity"]
+    ref_id: int
+    title: str
+    reservation_id: str
+    status: Literal["booked", "cancelled"] = "booked"
+
+
+class CheckoutResult(BaseModel):
+    status: Literal["booked", "compensated"]
+    message: str
+    workflow_id: str
+    reservations: list[CheckoutReservation] = Field(default_factory=list)
+    compensations: list[CheckoutReservation] = Field(default_factory=list)
+    failure: str | None = None
+    booking_id: int | None = None

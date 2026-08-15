@@ -64,14 +64,17 @@ Read by `config.py`. All optional except the API key.
 | `RESEARCH_SEARCHES` | `6` | parallel searches per research pass |
 | `WEB_SEARCH_MAX_USES` | `1` | web searches per search activity |
 | `WEB_SEARCH_FAIL_RATE` | `0.3` | injected retryable failure rate in the fan-out |
+| `CHECKOUT_FAIL_HOTEL` | `true` | fail the hotel step so checkout compensates the flight |
+| `CHECKOUT_STEP_DELAY_SECONDS` | `1.0` | makes checkout steps easy to see in history |
 
 ## Layout
 
 ```
 python/
 ├── worker.py          # entrypoint: polls travel-agent, runs workflow + activities
-├── workflows/agent.py # TravelAgentWorkflow — the durable ReAct loop + HITL + fan-out
-├── activities/        # llm.py · tools.py · db.py · research.py · control.py
+├── workflows/agent.py    # TravelAgentWorkflow — the durable ReAct loop + HITL + fan-out
+├── workflows/checkout.py # CheckoutWorkflow — ordered booking + compensation
+├── activities/           # includes retry-safe checkout provider steps
 ├── prompts.py         # system prompt + TOOLS + research prompts/schemas
 ├── models/types.py    # pydantic models
 └── config.py          # the ONE env reader
@@ -88,6 +91,10 @@ make worker        #   …and resumes on the exact next step
 make kill-db       # mid-turn: the tool activity retries with backoff (watch the UI)
 make db            #   …and the next retry just succeeds
 ```
+
+Approve a trip containing a flight and hotel to run `CheckoutWorkflow`:
+`book_flight` succeeds, `book_hotel` fails, and `cancel_flight` compensates.
+Set `CHECKOUT_FAIL_HOTEL=false` for the successful commit path.
 
 Plus the **Demo controls** drawer (top-right in the UI) → flip the **LLM API**
 switch to simulate a provider outage; the turn's LLM calls retry until you flip

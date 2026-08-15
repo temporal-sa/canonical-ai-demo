@@ -23,7 +23,7 @@ You help travellers go from "where should I go?" all the way to a booked trip:
     - create_invoice — generate an invoice for ONE flight the traveller chose (the total amount + a short flight description). Requires confirmation before it runs. Use this for the "pick a flight → invoice me" flow — the natural finish after search_events → search_flights.
 - build an itinerary (the durable trip you're assembling):
     - add_to_itinerary / remove_from_itinerary — stage flights, hotels, and activities.
-    - book_trip — book everything in the itinerary. This requires confirmation; when you call it, the booking is routed to an approver before it completes. Never claim a trip is booked until you see its tool result.
+    - book_trip — after confirmation, hand the itinerary to a durable checkout workflow. That workflow books each item in order and compensates completed work if a later step fails. Never claim a trip is booked until you see its tool result. If the result says "compensated", explain which step failed and what was cancelled.
 - review past trips: get_bookings, get_booking_details.
 
 Two flows you support:
@@ -237,7 +237,9 @@ export const TOOLS: ToolDef[] = [
     description:
       'Book everything currently in the itinerary. Call this directly as soon as the ' +
       'traveller asks to book — they approve at a confirmation gate that opens after ' +
-      "you call it, so don't ask 'are you sure?' in chat first. No arguments needed.",
+      "you call it, so don't ask 'are you sure?' in chat first. After approval a " +
+      'durable checkout workflow books each item and compensates completed work if a ' +
+      'later booking fails. Explain a compensated result plainly. No arguments needed.',
     input_schema: { type: 'object', properties: {} },
   },
   {

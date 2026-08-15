@@ -8,7 +8,7 @@ can pause to wait for a human.
 The loop never hard-codes a tool name. Every tool call goes through `_dispatch`,
 which runs it by its behavior:
   • plain    → run it, give the result back to the LLM   (most tools)
-  • gated    → pause for a human to approve, then run it  (book_trip, create_invoice)
+  • gated    → pause for approval, then run or delegate   (book_trip, create_invoice)
   • terminal → the tool's output IS the answer; stop      (research_destination)
 
 To build a different agent: change the tools (prompts.py), the data
@@ -22,7 +22,7 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+from temporalio.exceptions import ActivityError, ChildWorkflowError
 
 with workflow.unsafe.imports_passed_through():
     from activities.llm import call_llm
@@ -35,6 +35,7 @@ with workflow.unsafe.imports_passed_through():
     from models.types import (
         ApprovalDecision,
         ChatMessage,
+        CheckoutRequest,
         ItineraryItem,
         LLMRequest,
         LLMResponse,
@@ -49,6 +50,7 @@ with workflow.unsafe.imports_passed_through():
         WriteRequest,
     )
     from prompts import system_prompt
+    from workflows.checkout import CheckoutWorkflow
 
 # Retry policies. Temporal retries a failed Activity for you — no try/except
 # needed. maximum_attempts is unset, so it retries forever with backoff: a
@@ -79,7 +81,7 @@ class ToolOutcome:
     assistant_text: str = ""
 
 
-def _failure_message(e: ActivityError) -> str:
+def _failure_message(e: ActivityError | ChildWorkflowError) -> str:
     return getattr(e.cause, "message", None) or "That action could not be completed."
 
 
@@ -92,6 +94,7 @@ class TravelAgentWorkflow:
         self.approval: ApprovalDecision | None = None
         self.turn_in_progress: bool = False
         self.llm_down: bool = False  # demo kill-switch, scoped to THIS conversation
+        self.checkout_attempt: int = 0
 
         # The itinerary is just workflow state — a durable list, no DB table needed.
         self.itinerary: list[ItineraryItem] = []
@@ -108,7 +111,7 @@ class TravelAgentWorkflow:
             "research_destination": self._h_research,       # terminal
             "add_to_itinerary": self._h_add_to_itinerary,   # durable state
             "remove_from_itinerary": self._h_remove_from_itinerary,
-            "book_trip": self._h_book_trip,                 # gated + durable state
+            "book_trip": self._h_book_trip,                 # gated → checkout child workflow
             "create_invoice": self._h_create_invoice,       # gated
         }
 
@@ -189,7 +192,7 @@ class TravelAgentWorkflow:
         handler = self._handlers.get(call.name, self._run_plain_tool)
         try:
             return await handler(call)
-        except ActivityError as e:
+        except (ActivityError, ChildWorkflowError) as e:
             return ToolOutcome(result=json.dumps({"error": _failure_message(e)}))
 
     async def _run_plain_tool(self, call: ToolCall) -> ToolOutcome:
@@ -383,15 +386,25 @@ class TravelAgentWorkflow:
             reason = f" Reason: {decision.reason}" if decision.reason else ""
             return ToolOutcome(result=f"The traveller DECLINED this booking.{reason}")
 
-        book_call = ToolCall(id="book", name="book_trip",
-                             args={"items": items, "summary": summary})
-        result = await workflow.execute_activity(
-            execute_tool, ToolRequest(call=book_call, account_key=self.account_key),
-            start_to_close_timeout=timedelta(seconds=30),
-            retry_policy=TOOL_RETRY, summary=book_call.name,
+        self.checkout_attempt += 1
+        checkout_id = f"{self.account_key}-checkout-{self.checkout_attempt}"
+        checkout = await workflow.execute_child_workflow(
+            CheckoutWorkflow.run,
+            CheckoutRequest(
+                account_key=self.account_key,
+                items=list(self.itinerary),
+                summary=summary,
+            ),
+            id=checkout_id,
+            static_summary="Agent-invoked durable checkout",
+            static_details=(
+                "Books itinerary items in order and compensates completed "
+                "reservations if a later step fails."
+            ),
         )
-        self.itinerary = []  # booked → clear the itinerary
-        return ToolOutcome(result=result)
+        if checkout.status == "booked":
+            self.itinerary = []
+        return ToolOutcome(result=checkout.model_dump_json())
 
     async def _h_create_invoice(self, call: ToolCall) -> ToolOutcome:
         """Invoice one chosen flight — pause for approval, then settle."""
