@@ -68,6 +68,12 @@ CHECKOUT_FAIL_HOTEL = os.getenv("CHECKOUT_FAIL_HOTEL", "true").lower() in (
     "1", "true", "yes", "on",
 )
 CHECKOUT_STEP_DELAY_SECONDS = float(os.getenv("CHECKOUT_STEP_DELAY_SECONDS", "1.0"))
+# Demo pacing: an artificial delay (seconds) each execute_tool activity waits
+# before returning. DB lookups resolve near-instantly, which leaves no room to
+# narrate — or to kill a worker mid-tool-call — during a live demo. Default 1s
+# gives every tool call a visible beat in the workflow history. Set to 0 to
+# disable (e.g. for tests / production-like runs).
+TOOL_DELAY_SECONDS = float(os.getenv("TOOL_DELAY_SECONDS", "1.0"))
 
 # (The HTTP gateway + web UI live in web/ — see web/gateway.py. This folder is
 #  worker-only: workflow, activities, and the config they need.)

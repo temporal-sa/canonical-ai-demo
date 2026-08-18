@@ -55,6 +55,10 @@ export const CHECKOUT_STEP_DELAY_MS = Math.max(
   0,
   Number(process.env.CHECKOUT_STEP_DELAY_SECONDS ?? '1.0') * 1000
 );
+// Demo pacing: artificial delay (seconds) each executeTool activity waits before
+// returning, so instant DB lookups get a visible beat in the timeline (and a
+// window to kill a worker mid-call). Set to 0 to disable. Mirrors python/config.py.
+export const TOOL_DELAY_SECONDS = parseFloat(process.env.TOOL_DELAY_SECONDS ?? '1.0');
 
 // ── Temporal connections — local dev server, Cloud (API key), or Cloud (mTLS). ──
 // The Worker polls over a NativeConnection; the kill-switch bridge (control.ts)

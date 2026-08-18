@@ -10,6 +10,7 @@
 import { ApplicationFailure } from '@temporalio/common';
 
 import * as db from './db';
+import { TOOL_DELAY_SECONDS } from '../config';
 import type { ToolRequest } from '../types';
 
 // Book the itinerary with one business rule: you can't book the same flight or
@@ -32,6 +33,12 @@ async function settleBooking(
 }
 
 export async function executeTool(req: ToolRequest): Promise<string> {
+  // Demo pacing beat: DB lookups are instant, so give each tool call a visible
+  // moment in the timeline (and a window to kill a worker mid-call). See
+  // config.TOOL_DELAY_SECONDS; set it to 0 to disable. Mirrors python/activities/tools.py.
+  if (TOOL_DELAY_SECONDS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, TOOL_DELAY_SECONDS * 1000));
+  }
   const { name, args } = req.call;
   let result: unknown;
   try {
