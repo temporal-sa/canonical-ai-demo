@@ -52,6 +52,8 @@ DESTINATIONS = [
       "An open-air museum where ancient ruins, Baroque piazzas, and trattoria dinners share the same cobblestone streets."),
     D("Barcelona", "Spain", "Europe", "BCN", "May–Jun & Sep", 165, "beach,architecture,nightlife,food,art",
       "Gaudí's surreal architecture meets Mediterranean beaches, tapas bars, and a nightlife that runs until sunrise."),
+    D("Madrid", "Spain", "Europe", "MAD", "Apr–Jun & Sep–Oct", 150, "art,food,nightlife,history,football",
+      "Spain's sun-soaked capital — world-class art museums, late-night tapas crawls, grand plazas, and a football-mad soul."),
     D("Lisbon", "Portugal", "Europe", "LIS", "Mar–May & Sep–Oct", 130, "food,coast,history,budget,views",
       "Hills, tiled facades, and trams over the Tagus — Western Europe's most affordable capital, with seafood and soulful fado."),
     D("London", "United Kingdom", "Europe", "LHR", "May–Sep", 240, "history,museums,theatre,food,city",
@@ -100,6 +102,10 @@ DESTINATIONS = [
       "Endless sunshine, beach towns, Hollywood, and taco trucks — a sprawling, sun-soaked capital of pop culture."),
     D("Miami", "USA", "North America", "MIA", "Nov–Apr", 210, "beach,nightlife,food,art,sun",
       "Art Deco beaches, Latin flavor, and a nonstop nightlife scene where South Beach meets Little Havana."),
+    D("Seattle", "USA", "North America", "SEA", "Jun–Sep", 200, "coffee,food,nature,water,tech",
+      "Coffee, salmon, and snow-capped volcanoes — a laid-back Pacific Northwest city of markets, waterfront, and evergreen day hikes."),
+    D("Atlanta", "USA", "North America", "ATL", "Mar–May & Sep–Nov", 160, "food,music,history,sports,city",
+      "The capital of the New South — civil-rights history, a booming food and music scene, leafy neighborhoods, and Southern hospitality."),
     D("Honolulu", "USA", "North America", "HNL", "Apr–Jun & Sep–Nov", 250, "beach,surf,nature,family,sun",
       "Waikiki's surf and sand, volcanic hikes, and pristine snorkeling — the accessible heart of Hawaii."),
     D("Vancouver", "Canada", "North America", "YVR", "Jun–Sep", 190, "nature,food,city,mountains,coast",
@@ -135,6 +141,34 @@ DESTINATIONS = [
 
 # ── curated attractions: city -> [(name, category, cost, hours, description)] ──
 CURATED_ATTRACTIONS = {
+    "San Francisco": [
+        ("Golden Gate Bridge", "Landmark", 0, 1.5, "Walk or bike across the iconic red suspension bridge over the bay."),
+        ("Alcatraz Island", "History", 47, 3.0, "Ferry to the infamous former island prison in San Francisco Bay."),
+        ("Fisherman's Wharf & Pier 39", "Neighborhood", 0, 2.0, "Barking sea lions, sourdough bowls, and bay views along the historic waterfront."),
+        ("Ferry Building Marketplace", "Food", 25, 1.5, "Artisan food hall and farmers market on the Embarcadero."),
+        ("Muir Woods", "Nature", 15, 4.0, "Towering old-growth redwoods a short drive across the Golden Gate."),
+    ],
+    "Seattle": [
+        ("Pike Place Market", "Food", 20, 2.0, "The century-old public market — fishmongers, the original Starbucks, and endless stalls."),
+        ("Space Needle", "Viewpoint", 35, 1.5, "The 1962 World's Fair tower with a revolving glass floor and skyline views."),
+        ("Chihuly Garden and Glass", "Museum", 35, 1.5, "Dazzling blown-glass sculptures indoors and in a garden beneath the Space Needle."),
+        ("Museum of Pop Culture", "Museum", 32, 2.0, "Music, sci-fi, and pop-culture exhibits in a swooping Frank Gehry building."),
+        ("Mount Rainier Day Trip", "Day Trip", 90, 8.0, "Wildflower meadows and glaciers on a full-day trip to the volcano."),
+    ],
+    "Atlanta": [
+        ("Georgia Aquarium", "Family", 45, 3.0, "One of the world's largest aquariums — whale sharks, beluga whales, and manta rays."),
+        ("World of Coca-Cola", "Museum", 20, 1.5, "The story of the iconic soda, ending in a global tasting room."),
+        ("Martin Luther King Jr. Historic Site", "History", 0, 2.0, "The birth home, church, and memorial of the civil-rights leader."),
+        ("Atlanta BeltLine & Ponce City Market", "Neighborhood", 0, 2.5, "A former rail corridor turned trail, linking parks, murals, and a landmark food hall."),
+        ("Piedmont Park", "Park", 0, 1.5, "The city's green heart with skyline views and weekend markets."),
+    ],
+    "Madrid": [
+        ("Museo del Prado", "Museum", 15, 2.5, "One of the world's great art museums — Velázquez, Goya, and the Spanish masters."),
+        ("Royal Palace of Madrid", "Landmark", 15, 2.0, "The lavish official residence of the Spanish crown, with opulent state rooms."),
+        ("Retiro Park", "Park", 0, 1.5, "Madrid's elegant green heart — rowboats on the lake and the glass Crystal Palace."),
+        ("Mercado de San Miguel", "Food", 25, 1.5, "A historic iron-and-glass market hall for tapas, jamón, and vermouth."),
+        ("Santiago Bernabéu Stadium Tour", "Sports", 30, 2.0, "Behind the scenes at Real Madrid's legendary football cathedral."),
+    ],
     "Tokyo": [
         ("Senso-ji Temple", "Landmark", 0, 1.5, "Tokyo's oldest temple, approached through the lantern-lit Nakamise shopping street."),
         ("teamLab Planets", "Museum", 32, 2.0, "Immersive digital-art installation you walk through barefoot, often ankle-deep in water."),
@@ -293,6 +327,14 @@ CURATED_ATTRACTIONS = {
 
 # ── curated hotels: city -> [(name, area, stars, nightly_price)] ──────────────
 CURATED_HOTELS = {
+    "San Francisco": [("The Ritz-Carlton San Francisco", "Nob Hill", 5, 620), ("Hotel Zephyr", "Fisherman's Wharf", 4, 290),
+                      ("Hotel Zeppelin", "Union Square", 3, 210), ("HI San Francisco Downtown", "Union Square", 2, 70)],
+    "Seattle": [("Fairmont Olympic Hotel", "Downtown", 5, 520), ("The Edgewater Hotel", "Waterfront", 4, 340),
+                ("Hotel Ändra", "Belltown", 4, 240), ("Green Tortoise Hostel", "Pike Place", 2, 55)],
+    "Atlanta": [("The St. Regis Atlanta", "Buckhead", 5, 480), ("Hotel Clermont", "Poncey-Highland", 4, 230),
+                ("Glenn Hotel, Autograph Collection", "Downtown", 4, 190), ("Highland Inn", "Virginia-Highland", 2, 75)],
+    "Madrid": [("The Madrid EDITION", "Centro", 5, 520), ("Only YOU Boutique Hotel", "Chueca", 4, 260),
+               ("Hotel Regina", "Sol", 3, 150), ("The Hat Madrid", "La Latina", 2, 45)],
     "Tokyo": [("Park Hyatt Tokyo", "Shinjuku", 5, 620), ("Shibuya Stream Excel", "Shibuya", 4, 240),
               ("Hotel Gracery", "Shinjuku", 3, 145), ("UNPLAN Kagurazaka", "Kagurazaka", 2, 55)],
     "Kyoto": [("The Ritz-Carlton Kyoto", "Kamogawa", 5, 780), ("Hotel Kanra", "Shimogyo", 4, 320),
@@ -342,9 +384,17 @@ CURATED_HOTELS = {
 }
 
 # ── curated events: city -> [(name, category, start_date, end_date, description)] ──
-# Dates land in the seeded flight months (Mar/Jun/Sep/Oct/Dec 2026) so the
-# "travel for an event → search flights" handoff returns real flights.
+# The YEAR here (2026) is just a base — db.search_events re-bases it to the next
+# upcoming occurrence at query time, so only the month/day matter (keep them in
+# the event's real season). Flights work on any date, so no alignment is needed.
 CURATED_EVENTS = {
+    "San Francisco": [
+        ("Hardly Strictly Bluegrass", "Music", "2026-10-02", "2026-10-04", "A free three-day roots-music festival in Golden Gate Park."),
+        ("San Francisco Fleet Week", "Festival", "2026-10-08", "2026-10-13", "Blue Angels air shows and Navy ship tours over the bay."),
+    ],
+    "Seattle": [("Bumbershoot Arts Festival", "Festival", "2026-09-05", "2026-09-06", "Seattle's iconic music and arts festival at the Seattle Center.")],
+    "Atlanta": [("Music Midtown", "Music", "2026-09-19", "2026-09-20", "A major two-day music festival in Piedmont Park.")],
+    "Madrid": [("Festival de Otoño (Autumn Festival)", "Culture", "2026-10-01", "2026-10-25", "Madrid's flagship performing-arts festival across the city's theatres.")],
     "Auckland": [
         ("Pasifika Festival", "Festival", "2026-03-07", "2026-03-08", "The world's largest Pacific Island cultural festival — music, dance, and food at Western Springs."),
         ("Auckland Arts Festival", "Culture", "2026-03-11", "2026-03-29", "Three weeks of theatre, music, dance, and visual arts across the city."),
@@ -446,7 +496,9 @@ ORIGINS = [
     ("San Francisco", "SFO", "North America"), ("Los Angeles", "LAX", "North America"),
     ("New York City", "JFK", "North America"), ("Chicago", "ORD", "North America"),
     ("Seattle", "SEA", "North America"), ("Miami", "MIA", "North America"),
+    ("Atlanta", "ATL", "North America"),  # hub — a common demoer hometown origin
     ("London", "LHR", "Europe"), ("Paris", "CDG", "Europe"), ("Frankfurt", "FRA", "Europe"),
+    ("Madrid", "MAD", "Europe"),  # hub — a common demoer hometown origin
     ("Dubai", "DXB", "Middle East"), ("Singapore", "SIN", "Asia"),
     ("Hong Kong", "HKG", "Asia"), ("Sydney", "SYD", "Oceania"),
     ("Athens", "ATH", "Europe"),  # a hub too — enables domestic Athens ↔ island legs

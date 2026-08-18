@@ -31,6 +31,29 @@ const MONTH_NAMES = [
 ];
 const MONTH_ABBR = MONTH_NAMES.map((m) => m.slice(0, 3));
 
+// A near-future date to show when the traveller didn't name one. Dates in this
+// demo are cosmetic — flights are available on any date — so we just offer
+// something plausible rather than a fixed (and quickly stale) one.
+function defaultFlightDate(): string {
+  return new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// Shift a seeded event's fixed year forward so it always reads as upcoming.
+// Keeps the real month/day (festivals stay seasonal) and preserves the span,
+// which is what keeps the demo evergreen into 2027 and beyond.
+function rebaseEventDates(startIso: string, endIso: string): [string, string] {
+  const [sy, sm, sd] = startIso.split('-').map(Number);
+  const [ey, em, ed] = endIso.split('-').map(Number);
+  const now = new Date();
+  const ty = now.getFullYear();
+  const startThisYear = new Date(ty, sm - 1, sd);
+  const todayMidnight = new Date(ty, now.getMonth(), now.getDate());
+  const targetYear = startThisYear >= todayMidnight ? ty : ty + 1; // upcoming occurrence
+  const delta = targetYear - sy;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return [`${sy + delta}-${pad(sm)}-${pad(sd)}`, `${ey + delta}-${pad(em)}-${pad(ed)}`];
+}
+
 // Parse a month from a name ('March'), abbrev ('Mar'), number (3), or a
 // YYYY-MM / YYYY-MM-DD string. Returns 1–12 or null.
 function monthNum(month?: string | number | null): number | null {
@@ -84,8 +107,10 @@ export async function getDestinationInfo(name: string): Promise<Record<string, u
 }
 
 // ── flights ──────────────────────────────────────────────────────────────────
-// Destination is required; origin and depart_date narrow the results. Date
-// handling is tolerant: exact day → same calendar month → any date on the route.
+// Destination is required; origin narrows the results. Dates are intentionally
+// flexible: the route's flights are stamped with the requested departDate (or a
+// near-future default when none is given), so ANY date the traveller names
+// returns flights — the demo is never boxed into the seeded dates.
 export async function searchFlights(
   destination: string,
   origin?: string | null,
@@ -98,27 +123,18 @@ export async function searchFlights(
     params.push(`%${origin}%`, origin);
   }
 
-  const run = (extraClauses: string[], extraParams: unknown[]) => {
-    const where = [...base, ...extraClauses].join(' AND ');
-    const sql = `
-      SELECT flight_id, airline, flight_no, origin_city, origin_code,
-             dest_city, dest_code, depart_date::text AS depart_date,
-             depart_time, arrive_time, duration_min, stops,
-             price::float8 AS price, cabin
-      FROM flight
-      WHERE ${where}
-      ORDER BY price
-      LIMIT 12`;
-    return q(sql, [...params, ...extraParams]);
-  };
-
-  if (departDate) {
-    let rows = await run([`depart_date = $${params.length + 1}`], [departDate]);
-    if (rows.length) return rows;
-    rows = await run([`to_char(depart_date, 'YYYY-MM') = $${params.length + 1}`], [departDate.slice(0, 7)]);
-    if (rows.length) return rows;
-  }
-  return run([], []);
+  const sql = `
+    SELECT flight_id, airline, flight_no, origin_city, origin_code,
+           dest_city, dest_code, depart_time, arrive_time, duration_min,
+           stops, price::float8 AS price, cabin
+    FROM flight
+    WHERE ${base.join(' AND ')}
+    ORDER BY price
+    LIMIT 12`;
+  const effDate = departDate || defaultFlightDate();
+  const rows = await q(sql, params);
+  for (const r of rows) r.depart_date = effDate; // dates are cosmetic — echo what was asked for
+  return rows;
 }
 
 // ── events (the "travel for an event" entry point) ────────────────────────────
@@ -142,7 +158,12 @@ export async function searchEvents(
     WHERE ${clauses.join(' AND ')}
     ORDER BY e.start_date
     LIMIT 12`;
-  return q(sql, params);
+  const rows = await q(sql, params);
+  for (const r of rows) {
+    [r.start_date, r.end_date] = rebaseEventDates(r.start_date as string, r.end_date as string);
+  }
+  rows.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date))); // true upcoming order
+  return rows;
 }
 
 // ── hotels ───────────────────────────────────────────────────────────────────
@@ -196,8 +217,8 @@ export async function getItineraryItems(
       const r = (
         await q(
           `SELECT flight_id, airline, flight_no, origin_city, dest_city,
-                  depart_date::text AS depart_date, depart_time,
-                  price::float8 AS price FROM flight WHERE flight_id = $1`,
+                  depart_time, price::float8 AS price
+           FROM flight WHERE flight_id = $1`,
           [ref]
         )
       )[0];
@@ -206,7 +227,7 @@ export async function getItineraryItems(
           kind: 'flight',
           ref_id: r.flight_id,
           title: `${r.airline} ${r.flight_no}`,
-          subtitle: `${r.origin_city} → ${r.dest_city} · ${r.depart_date} ${r.depart_time}`,
+          subtitle: `${r.origin_city} → ${r.dest_city} · ${defaultFlightDate()} ${r.depart_time}`,
           price: r.price,
         });
       }

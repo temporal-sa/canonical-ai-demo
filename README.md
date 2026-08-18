@@ -146,11 +146,12 @@ Full-trip flow:
   → `add_to_itinerary` → `book_trip` (approval gate) → `CheckoutWorkflow`
   → `book_flight` → failed `book_hotel` → `cancel_flight`
 
-> Seeded flight dates span 2026 (**03-14, 06-13, 09-12, 09-19, 10-03, 12-19**);
-> origins include SFO, LAX, JFK, ORD, SEA, MIA, LHR, CDG, FRA, DXB, SIN, HKG, SYD.
-> Flight search is date-tolerant (falls back to the same month), so an event's
-> dates still return flights. ~49 destinations and 82 events across every region —
-> and `research_destination` works for *any* place (it's live web search).
+> Flights are **date-agnostic**: `search_flights` returns the route's flights
+> stamped with whatever `depart_date` the traveller asks for (or a near-future
+> default when none is given), so the demo is never boxed into fixed windows —
+> any date just works. Origins include SFO, LAX, JFK, ORD, SEA, ATL, MIA, LHR,
+> CDG, FRA, MAD, DXB, SIN, HKG, SYD. ~54 destinations and 87 events across every
+> region — and `research_destination` works for *any* place (it's live web search).
 
 ### The demo money-shots
 
@@ -275,7 +276,7 @@ IT-support or insurance agent:
 The seed is generated deterministically:
 
 ```bash
-make seed          # → db/seed.sql  (~49 destinations, 245 attractions, 196 hotels, 82 events, ~7,500 flights)
+make seed          # → db/seed.sql  (~54 destinations, 270 attractions, 216 hotels, 87 events, ~10,200 flights)
 ```
 
 Edit `db/generate_seed.py` and re-run. The 20 headline cities have hand-curated

@@ -9,6 +9,7 @@ conversation via account_key (the workflow ID).
 """
 
 import calendar
+from datetime import date, timedelta
 
 import psycopg
 from psycopg.rows import dict_row
@@ -18,6 +19,26 @@ import config
 
 def _connect():
     return psycopg.connect(config.DB_URL, row_factory=dict_row)
+
+
+def _default_flight_date() -> str:
+    """A near-future date to show when the traveller didn't name one. Dates in
+    this demo are cosmetic — flights are available on any date — so we just
+    offer something plausible rather than a fixed (and quickly stale) one."""
+    return (date.today() + timedelta(days=21)).isoformat()
+
+
+def _rebase_event_dates(start_iso: str, end_iso: str) -> tuple[str, str]:
+    """Shift a seeded event's fixed year forward so it always reads as upcoming.
+    Keeps the real month/day (festivals stay seasonal) and preserves the span,
+    which is what keeps the demo evergreen into 2027 and beyond."""
+    start, end = date.fromisoformat(start_iso), date.fromisoformat(end_iso)
+    today = date.today()
+    # this year's occurrence if it hasn't started yet, else next year's
+    target_year = today.year if start.replace(year=today.year) >= today else today.year + 1
+    delta = target_year - start.year
+    return (start.replace(year=start.year + delta).isoformat(),
+            end.replace(year=end.year + delta).isoformat())
 
 
 def _month_num(month) -> int | None:
@@ -84,11 +105,12 @@ def get_destination_info(name: str) -> dict:
 def search_flights(destination: str, origin: str | None = None,
                    depart_date: str | None = None) -> list[dict]:
     """Search seeded flights. Destination is required; origin (city or airport
-    code) and depart_date (YYYY-MM-DD) narrow the results. Cheapest first.
+    code) narrows the results. Cheapest first.
 
-    Date handling is tolerant so the event → flight handoff always returns
-    something: try the exact day, then the same calendar month, then any date
-    on the route."""
+    Dates are intentionally flexible: the route's flights are stamped with the
+    requested depart_date (or a near-future default when none is given), so ANY
+    date the traveller names returns flights — the demo is never boxed into the
+    handful of dates that happen to be seeded."""
     base = ["(dest_city ILIKE %(dest)s OR dest_code ILIKE %(dest_code)s)"]
     params: dict = {"dest": f"%{destination}%", "dest_code": destination}
     if origin:
@@ -96,28 +118,21 @@ def search_flights(destination: str, origin: str | None = None,
         params["orig"] = f"%{origin}%"
         params["orig_code"] = origin
 
-    def run(extra_clauses: list[str], extra_params: dict) -> list[dict]:
-        sql = f"""
-            SELECT flight_id, airline, flight_no, origin_city, origin_code,
-                   dest_city, dest_code, depart_date::text AS depart_date,
-                   depart_time, arrive_time, duration_min, stops,
-                   price::float8 AS price, cabin
-            FROM flight
-            WHERE {' AND '.join(base + extra_clauses)}
-            ORDER BY price
-            LIMIT 12
-        """
-        with _connect() as conn:
-            return conn.execute(sql, {**params, **extra_params}).fetchall()
-
-    if depart_date:
-        rows = run(["depart_date = %(date)s"], {"date": depart_date})
-        if rows:
-            return rows
-        rows = run(["to_char(depart_date, 'YYYY-MM') = %(ym)s"], {"ym": depart_date[:7]})
-        if rows:
-            return rows
-    return run([], {})
+    sql = f"""
+        SELECT flight_id, airline, flight_no, origin_city, origin_code,
+               dest_city, dest_code, depart_time, arrive_time, duration_min,
+               stops, price::float8 AS price, cabin
+        FROM flight
+        WHERE {' AND '.join(base)}
+        ORDER BY price
+        LIMIT 12
+    """
+    eff_date = depart_date or _default_flight_date()
+    with _connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    for r in rows:
+        r["depart_date"] = eff_date  # dates are cosmetic — echo what was asked for
+    return rows
 
 
 # ── events (the "travel for an event" entry point) ────────────────────────────
@@ -140,7 +155,11 @@ def search_events(destination: str, month=None) -> list[dict]:
         LIMIT 12
     """
     with _connect() as conn:
-        return conn.execute(sql, params).fetchall()
+        rows = conn.execute(sql, params).fetchall()
+    for r in rows:
+        r["start_date"], r["end_date"] = _rebase_event_dates(r["start_date"], r["end_date"])
+    rows.sort(key=lambda r: r["start_date"])  # true upcoming order after rebasing
+    return rows
 
 
 # ── hotels ───────────────────────────────────────────────────────────────────
@@ -192,15 +211,15 @@ def get_itinerary_items(items: list[dict]) -> list[dict]:
             if kind == "flight":
                 r = conn.execute(
                     """SELECT flight_id, airline, flight_no, origin_city, dest_city,
-                              depart_date::text AS depart_date, depart_time,
-                              price::float8 AS price FROM flight WHERE flight_id = %s""",
+                              depart_time, price::float8 AS price
+                       FROM flight WHERE flight_id = %s""",
                     (ref,),
                 ).fetchone()
                 if r:
                     out.append({
                         "kind": "flight", "ref_id": r["flight_id"],
                         "title": f"{r['airline']} {r['flight_no']}",
-                        "subtitle": f"{r['origin_city']} → {r['dest_city']} · {r['depart_date']} {r['depart_time']}",
+                        "subtitle": f"{r['origin_city']} → {r['dest_city']} · {_default_flight_date()} {r['depart_time']}",
                         "price": r["price"],
                     })
             elif kind == "hotel":

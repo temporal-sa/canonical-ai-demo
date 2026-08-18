@@ -17,7 +17,8 @@ destination (optionally in a given month). This is the entry point for "I want t
 travel for an event": find the event, then search flights around its dates.
 - understand destinations:
     - get_destination_info — quick facts + top attractions for one place. This is your \
-DEFAULT for "tell me about X", "what's X like", "best time for X", or a named place.
+DEFAULT for explicit info questions — "tell me about X", "what's X like", "best time for \
+X". A bare place name ("Tokyo") is trip intent, not just an info dump — see the guidelines.
     - search_destinations — find places in our catalog by name, country, region, or \
 interest (e.g. "beaches in Europe", "food cities in Asia").
     - research_destination — a SLOW, heavy LIVE pass that plans ~6 web searches, runs \
@@ -83,6 +84,15 @@ each up and add them together, then summarize the leg.
 create_invoice RIGHT AWAY. Do not summarize the itinerary and ask "shall I confirm?" first \
 — that pre-confirmation is redundant because the tool opens a confirmation gate the \
 traveller approves. Just call the tool.
+- A named destination means "plan me a trip". When the traveller names a place — whether a \
+bare "Tokyo", "plan a trip to X", or "book a trip to X" — don't stop at quick facts and ask \
+"want me to find flights?". Give a one- or two-line intro if useful, then GO AHEAD and \
+assemble a trip: search flights, a hotel, and 1–2 signature attractions, pick sensible \
+defaults (cheapest suitable flight, a well-rated hotel in budget), and add_to_itinerary. \
+Summarize the staged trip in a line or two and invite tweaks. If they said "book", go \
+straight to book_trip after staging — the approval gate is where they confirm. Ask for a \
+detail (like departure city) only when it's genuinely needed and you can't pick a sensible \
+default.
 - Keep replies short and conversational. This is a chat, not an essay.
 - If a tool returns an error, explain the problem plainly and suggest a next step."""
 
@@ -144,19 +154,20 @@ TOOLS = [
             "Search flights to a destination. Destination is required; origin (city or "
             "airport code) and depart_date (YYYY-MM-DD) narrow the results. Returns "
             "flights with IDs, airline, times, stops, and price (cheapest first). "
-            "Seeded departure dates are 2026-09-12, 2026-09-19, and 2026-10-03; "
-            "origins include San Francisco (SFO), Los Angeles (LAX), New York (JFK), "
-            "Chicago (ORD), Seattle (SEA), Miami (MIA), London (LHR), Paris (CDG), "
-            "Frankfurt (FRA), Dubai (DXB), Singapore (SIN), Hong Kong (HKG), and "
-            "Sydney (SYD). If the traveller doesn't give an origin or date, ask or "
-            "search without them."
+            "Flights are available on ANY date — pass whatever depart_date the traveller "
+            "wants (or omit it) and results come back either way, so never tell the "
+            "traveller a date is unavailable. Origins include San Francisco (SFO), Los "
+            "Angeles (LAX), New York (JFK), Chicago (ORD), Seattle (SEA), Atlanta (ATL), "
+            "Miami (MIA), London (LHR), Paris (CDG), Frankfurt (FRA), Madrid (MAD), Dubai "
+            "(DXB), Singapore (SIN), Hong Kong (HKG), and Sydney (SYD). If the traveller "
+            "doesn't give an origin, ask or search without one."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "destination": {"type": "string", "description": "Destination city or airport code"},
                 "origin": {"type": "string", "description": "Origin city or airport code (optional)"},
-                "depart_date": {"type": "string", "description": "YYYY-MM-DD (optional)"},
+                "depart_date": {"type": "string", "description": "YYYY-MM-DD (optional; any date works)"},
             },
             "required": ["destination"],
         },
