@@ -59,7 +59,7 @@ RESEARCH_SEARCHES = int(os.getenv("RESEARCH_SEARCHES", "6"))
 # rate means a couple of them will visibly retry (with backoff) in the workflow
 # history while the rest sail through — a live demonstration of Temporal owning
 # retries. Set to 0 to disable.
-WEB_SEARCH_FAIL_RATE = float(os.getenv("WEB_SEARCH_FAIL_RATE", "0.3"))
+WEB_SEARCH_FAIL_RATE = float(os.getenv("WEB_SEARCH_FAIL_RATE", "0.4"))
 
 # Durable checkout demo. The default intentionally fails the hotel step after
 # the flight is reserved so CheckoutWorkflow visibly compensates by cancelling

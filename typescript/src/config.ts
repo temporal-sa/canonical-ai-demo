@@ -44,7 +44,7 @@ export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6
 // research_destination knobs — mirror python/config.py.
 export const WEB_SEARCH_MAX_USES = parseInt(process.env.WEB_SEARCH_MAX_USES ?? '1', 10);
 export const RESEARCH_SEARCHES = parseInt(process.env.RESEARCH_SEARCHES ?? '6', 10);
-export const WEB_SEARCH_FAIL_RATE = parseFloat(process.env.WEB_SEARCH_FAIL_RATE ?? '0.3');
+export const WEB_SEARCH_FAIL_RATE = parseFloat(process.env.WEB_SEARCH_FAIL_RATE ?? '0.4');
 
 // Durable checkout demo. By default the hotel step fails after the flight is
 // reserved, making CheckoutWorkflow's compensation visible in the UI history.

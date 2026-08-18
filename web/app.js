@@ -486,6 +486,6 @@ $('itin-book').onclick = () => runTurn('I’d like to book this trip.');
 // ── on load ──────────────────────────────────────────────────────────────────
 renderItinerary([], 0);  // show the (empty) itinerary rail right away — no conversation yet
 addMsg('assistant',
-  "Hi! Where would you like to travel? I can find events, flights, and hotels — and book your trip.",
+  "Hi! Where would you like to travel? I can find events, flights, and hotels, do a deep-dive research pass on a destination — and book your trip.",
   { counted: false });  // client-side greeting; not part of the server transcript
 $('input').focus();
