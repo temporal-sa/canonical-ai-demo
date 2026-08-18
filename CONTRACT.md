@@ -25,10 +25,43 @@ everything below. Target *this document*, not the Python source.
 | Workflow type | `TravelAgentWorkflow` | `WORKFLOW_TYPE` env (gateway); the worker registers a workflow of this exact type name |
 | Start argument | a single `string` — the traveller's email | `gateway.py` → `start_workflow(WORKFLOW_TYPE, email, id=conversationId, ...)` |
 | Workflow ID | `trip-<email-slug>-<hex>` = the conversation ID | minted by the gateway |
+| Checkout child workflow | `CheckoutWorkflow` | started by `book_trip` after approval |
 
 The workflow does **not** return a meaningful value — it stays alive for the
 whole conversation, serving updates and queries. (Conversation = workflow
 lifetime.)
+
+### Agent → checkout child workflow
+
+After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
+`CheckoutWorkflow` on the same task queue with ID
+`<conversation-id>-checkout-<attempt>`. Its input and result are plain JSON:
+
+```jsonc
+// CheckoutRequest
+{
+  "account_key": "trip-…",
+  "items": [ { "kind": "flight", "ref_id": 1, "title": "…", "subtitle": "…", "price": 250 } ],
+  "summary": "2 item(s) — $450.00"
+}
+
+// CheckoutResult
+{
+  "status": "booked" | "compensated",
+  "message": "…",
+  "workflow_id": "trip-…-checkout-1",
+  "reservations": [],
+  "compensations": [],
+  "failure": null,
+  "booking_id": null
+}
+```
+
+The child reserves flights, hotels, and activities in that order. If a step
+fails it compensates completed reservations in reverse order. For the default
+demo configuration, `book_flight` succeeds, `book_hotel` raises the
+non-retryable `HotelBookingFailed`, and `cancel_flight` succeeds. The child then
+returns `status: "compensated"`; it does not fail the long-lived agent workflow.
 
 ---
 

@@ -8,7 +8,7 @@
 // The loop never hard-codes a tool name. Every tool call goes through dispatch(),
 // which runs it by its behavior:
 //   • plain    → run it, give the result back to the LLM   (most tools)
-//   • gated    → pause for a human to approve, then run it  (book_trip, create_invoice)
+//   • gated    → pause for approval, then run or delegate   (book_trip, create_invoice)
 //   • terminal → the tool's output IS the answer; stop      (research_destination)
 //
 // This file is bundled into the Temporal V8 sandbox: it must stay deterministic
@@ -24,6 +24,8 @@ import {
   workflowInfo,
   ActivityFailure,
   ApplicationFailure,
+  ChildWorkflowFailure,
+  executeChild,
 } from '@temporalio/workflow';
 import type { RetryPolicy } from '@temporalio/common';
 import type * as activities from './activities';
@@ -31,6 +33,7 @@ import { systemPrompt } from './prompts';
 import type {
   ApprovalDecision,
   ChatMessage,
+  CheckoutRequest,
   ItineraryItem,
   LLMResponse,
   PendingConfirmation,
@@ -41,6 +44,9 @@ import type {
   ToolCall,
   TurnResult,
 } from './types';
+import { CheckoutWorkflow } from './checkout';
+
+export { CheckoutWorkflow } from './checkout';
 
 // Retry policies. Temporal retries a failed Activity for you — no try/catch
 // needed. maximumAttempts is unset, so it retries forever with backoff: a
@@ -95,6 +101,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
   let approval: ApprovalDecision | null = null;
   let turnInProgress = false;
   let llmDown = false; // demo kill-switch, scoped to THIS conversation
+  let checkoutAttempt = 0;
   let itinerary: ItineraryItem[] = [];
 
   // research_destination — live fan-out progress for the UI
@@ -117,7 +124,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
     return '';
   }
 
-  function failureMessage(e: ActivityFailure): string {
+  function failureMessage(e: ActivityFailure | ChildWorkflowFailure): string {
     const cause = e.cause;
     if (cause instanceof ApplicationFailure && cause.message) return cause.message;
     return 'That action could not be completed.';
@@ -150,7 +157,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
     research_destination: hResearch, // terminal
     add_to_itinerary: hAddToItinerary, // durable state
     remove_from_itinerary: hRemoveFromItinerary,
-    book_trip: hBookTrip, // gated + durable state
+    book_trip: hBookTrip, // gated → checkout child workflow
     create_invoice: hCreateInvoice, // gated
   };
 
@@ -163,7 +170,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
     try {
       return await handler(call);
     } catch (e) {
-      if (e instanceof ActivityFailure) {
+      if (e instanceof ActivityFailure || e instanceof ChildWorkflowFailure) {
         return { result: JSON.stringify({ error: failureMessage(e) }) };
       }
       throw e;
@@ -310,10 +317,18 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
       return { result: `The traveller DECLINED this booking.${reason}` };
     }
 
-    const bookCall: ToolCall = { id: 'book', name: 'book_trip', args: { items, summary } };
-    const result = await runTool(bookCall);
-    itinerary = []; // booked → clear the itinerary
-    return { result };
+    checkoutAttempt += 1;
+    const checkoutRequest: CheckoutRequest = {
+      account_key: accountKey,
+      items: [...itinerary],
+      summary,
+    };
+    const checkout = await executeChild(CheckoutWorkflow, {
+      args: [checkoutRequest],
+      workflowId: `${accountKey}-checkout-${checkoutAttempt}`,
+    });
+    if (checkout.status === 'booked') itinerary = [];
+    return { result: JSON.stringify(checkout) };
   }
 
   async function hCreateInvoice(call: ToolCall): Promise<ToolOutcome> {

@@ -9,10 +9,12 @@ Infrastructure errors (DB down) raise → Temporal retries the activity.
 """
 
 import json
+import time
 
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+import config
 from . import db
 from models.types import ToolRequest
 
@@ -38,6 +40,11 @@ def _settle_booking(account_key: str, items: list[dict], summary: str) -> dict:
 
 @activity.defn
 def execute_tool(req: ToolRequest) -> str:
+    # Demo pacing beat: DB lookups are instant, so give each tool call a visible
+    # moment in the timeline (and a window to kill a worker mid-call). See
+    # config.TOOL_DELAY_SECONDS; set it to 0 to disable.
+    if config.TOOL_DELAY_SECONDS > 0:
+        time.sleep(config.TOOL_DELAY_SECONDS)
     name, args = req.call.name, req.call.args
     try:
         if name == "search_events":

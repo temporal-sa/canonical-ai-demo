@@ -51,10 +51,11 @@ Only **one** SDK's worker polls the shared `travel-agent` queue at a time. Root
 
 ---
 
-## The one file to read
+## The two workflow files to read
 
-`python/workflows/agent.py` **is** the demo. The agentic loop is just a `while`
-loop; Temporal is what makes it durable:
+`python/workflows/agent.py` is the durable agent loop;
+`python/workflows/checkout.py` is the deterministic business workflow it calls
+after approval. Both use ordinary control flow:
 
 ```
 01 Receive input   → a chat message (a Temporal update)
@@ -69,6 +70,8 @@ Everything else is supporting cast:
 | Path | What it is |
 |------|------------|
 | `python/workflows/agent.py` | `TravelAgentWorkflow` — the durable ReAct loop + HITL + research fan-out |
+| `python/workflows/checkout.py` | `CheckoutWorkflow` — deterministic booking orchestration + compensation |
+| `python/activities/checkout.py` | Retry-safe flight/hotel/activity booking and cancellation steps |
 | `python/activities/llm.py` | The LLM call as an Activity (Anthropic or OpenAI). Temporal owns retries. |
 | `python/activities/tools.py` | Tool dispatch → the SQL functions. |
 | `python/activities/db.py` | Plain parametrized SQL over the travel dataset. |
@@ -100,6 +103,10 @@ Everything else is supporting cast:
    only the unfinished searches re-run — completed ones replay from history.
 6. **Injectable failure.** The Demo-controls drawer has a per-conversation LLM
    kill-switch: flip it and every LLM call retries until you flip it back.
+7. **Agent → workflow.** After the human approves `book_trip`, the agent starts
+   a child `CheckoutWorkflow`. It books the flight, hits the demo hotel failure,
+   and compensates with `cancel_flight` using a plain `try`/`except` and loop.
+   The agent owns judgment; the child workflow owns execution guarantees.
 
 ---
 
@@ -136,13 +143,15 @@ Full-trip flow:
 - *"Do a deep research pass on 5 days in Tokyo for a first-timer who loves food."*
   → `research_destination` (watch the parallel fan-out in the progress card)
 - *"Add the cheapest flight and a hotel under $200, then book it."*
-  → `add_to_itinerary` → `book_trip` (approval gate)
+  → `add_to_itinerary` → `book_trip` (approval gate) → `CheckoutWorkflow`
+  → `book_flight` → failed `book_hotel` → `cancel_flight`
 
-> Seeded flight dates span 2026 (**03-14, 06-13, 09-12, 09-19, 10-03, 12-19**);
-> origins include SFO, LAX, JFK, ORD, SEA, MIA, LHR, CDG, FRA, DXB, SIN, HKG, SYD.
-> Flight search is date-tolerant (falls back to the same month), so an event's
-> dates still return flights. ~49 destinations and 82 events across every region —
-> and `research_destination` works for *any* place (it's live web search).
+> Flights are **date-agnostic**: `search_flights` returns the route's flights
+> stamped with whatever `depart_date` the traveller asks for (or a near-future
+> default when none is given), so the demo is never boxed into fixed windows —
+> any date just works. Origins include SFO, LAX, JFK, ORD, SEA, ATL, MIA, LHR,
+> CDG, FRA, MAD, DXB, SIN, HKG, SYD. ~54 destinations and 87 events across every
+> region — and `research_destination` works for *any* place (it's live web search).
 
 ### The demo money-shots
 
@@ -153,6 +162,9 @@ make worker        # …and resumes on the exact next step (unfinished searches 
 make kill-db       # mid-turn: the tool activity retries with backoff (watch the UI)
 make db            # …and the next retry just succeeds
 ```
+
+The checkout compensation path is deterministic by default. Set
+`CHECKOUT_FAIL_HOTEL=false` to demonstrate a successful checkout instead.
 
 Or open **Demo controls** (top-right) and flip the **LLM API** switch to simulate
 a provider outage — the current turn's LLM calls retry until you flip it back.
@@ -264,7 +276,7 @@ IT-support or insurance agent:
 The seed is generated deterministically:
 
 ```bash
-make seed          # → db/seed.sql  (~49 destinations, 245 attractions, 196 hotels, 82 events, ~7,500 flights)
+make seed          # → db/seed.sql  (~54 destinations, 270 attractions, 216 hotels, 87 events, ~10,200 flights)
 ```
 
 Edit `db/generate_seed.py` and re-run. The 20 headline cities have hand-curated

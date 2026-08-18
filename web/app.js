@@ -296,8 +296,10 @@ function showApprovalCard(pending) {
       `<pre class="conf-args">${escapeHtml(JSON.stringify(args, null, 2))}</pre>` +
       '<div class="conf-note">Confirm to generate the invoice.</div>';
   } else {
-    card.querySelector('.title').textContent = '⏸ Booking approval required';
-    desc.textContent = pending.detail || `$${Number(pending.amount || 0).toFixed(2)}`;
+    card.querySelector('.title').textContent = '⏸ Agent requests durable checkout';
+    desc.innerHTML =
+      `<div>${escapeHtml(pending.detail || `$${Number(pending.amount || 0).toFixed(2)}`)}</div>` +
+      '<div class="conf-note">Confirm to start CheckoutWorkflow.</div>';
   }
   card.querySelector('.approve').onclick = () => decide(card, true);
   card.querySelector('.reject').onclick = () => decide(card, false);
@@ -315,7 +317,7 @@ async function decide(card, approved) {
     const baseline = messages.filter((m) => m.role === 'assistant').length;
     await call('POST', `/conversations/${conversationId}/approve`, { approved });
     card.remove();
-    setBusy(true, approved ? 'confirming booking…' : 'cancelling…');
+    setBusy(true, approved ? 'running CheckoutWorkflow…' : 'cancelling…');
     await pollUntilSettled(baseline);
   } catch (e) {
     showError(e.message);

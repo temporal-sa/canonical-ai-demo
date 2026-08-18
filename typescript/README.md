@@ -79,6 +79,8 @@ Read by `src/config.ts` — the **same `.env`** the Python SDK uses.
 | `RESEARCH_SEARCHES` | `6` | parallel searches per research pass |
 | `WEB_SEARCH_MAX_USES` | `1` | web searches per search activity |
 | `WEB_SEARCH_FAIL_RATE` | `0.3` | injected retryable failure rate in the fan-out |
+| `CHECKOUT_FAIL_HOTEL` | `true` | fail the hotel step so checkout compensates the flight |
+| `CHECKOUT_STEP_DELAY_SECONDS` | `1.0` | makes checkout steps easy to see in history |
 
 `LLM_PROVIDER` is ignored here (Anthropic-only).
 
@@ -91,12 +93,17 @@ typescript/
 └── src/
     ├── worker.ts          # entrypoint: registers workflow + activities
     ├── agent.ts           # TravelAgentWorkflow — the durable ReAct loop + HITL + fan-out
+    ├── checkout.ts        # CheckoutWorkflow — ordered booking + compensation
     ├── prompts.ts         # system prompt + TOOLS + research prompts/schemas
     ├── types.ts           # wire DTOs — ⚠️ query payloads use snake_case (see CONTRACT.md)
     ├── config.ts          # env reader + Temporal connections
     └── activities/
-        ├── llm.ts  tools.ts  db.ts  research.ts  control.ts  index.ts
+        ├── llm.ts  tools.ts  db.ts  research.ts  checkout.ts  control.ts  index.ts
 ```
+
+Approve a trip containing a flight and hotel to run `CheckoutWorkflow`:
+`book_flight` succeeds, `book_hotel` fails, and `cancel_flight` compensates.
+Set `CHECKOUT_FAIL_HOTEL=false` for the successful commit path.
 
 ## Toolchain notes
 
