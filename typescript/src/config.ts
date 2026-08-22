@@ -46,8 +46,8 @@ export const WEB_SEARCH_MAX_USES = parseInt(process.env.WEB_SEARCH_MAX_USES ?? '
 export const RESEARCH_SEARCHES = parseInt(process.env.RESEARCH_SEARCHES ?? '6', 10);
 export const WEB_SEARCH_FAIL_RATE = parseFloat(process.env.WEB_SEARCH_FAIL_RATE ?? '0.4');
 
-// Durable checkout demo. By default the hotel step fails after the flight is
-// reserved, making CheckoutWorkflow's compensation visible in the UI history.
+// Durable checkout demo. By default the first checkout's hotel step fails after
+// the flight is reserved, making compensation visible in the UI history.
 export const CHECKOUT_FAIL_HOTEL = ['1', 'true', 'yes', 'on'].includes(
   (process.env.CHECKOUT_FAIL_HOTEL ?? 'true').toLowerCase()
 );

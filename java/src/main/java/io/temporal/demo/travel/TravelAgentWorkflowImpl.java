@@ -178,7 +178,7 @@ public class TravelAgentWorkflowImpl implements TravelAgentWorkflow {
     CheckoutWorkflow child = Workflow.newChildWorkflowStub(CheckoutWorkflow.class, ChildWorkflowOptions.newBuilder()
         .setWorkflowId("%s-checkout-%d".formatted(accountKey, ++checkoutAttempt))
         .setParentClosePolicy(ParentClosePolicy.PARENT_CLOSE_POLICY_REQUEST_CANCEL).build());
-    CheckoutResult checkout = child.run(new CheckoutRequest(accountKey, List.copyOf(itinerary), summary));
+    CheckoutResult checkout = child.run(checkoutRequestForAttempt(accountKey, itinerary, summary, checkoutAttempt));
     if ("booked".equals(checkout.status())) itinerary = new ArrayList<>();
     return new ToolOutcome(AnthropicClient.json(checkout), false, "");
   }
@@ -236,6 +236,11 @@ public class TravelAgentWorkflowImpl implements TravelAgentWorkflow {
   private static AgentActivities activities(int seconds, RetryOptions retry) {
     return Workflow.newActivityStub(AgentActivities.class, ActivityOptions.newBuilder()
         .setStartToCloseTimeout(Duration.ofSeconds(seconds)).setRetryOptions(retry).build());
+  }
+
+  static CheckoutRequest checkoutRequestForAttempt(
+      String accountKey, List<ItineraryItem> itinerary, String summary, int attempt) {
+    return new CheckoutRequest(accountKey, List.copyOf(itinerary), summary, attempt == 1);
   }
 
   private String itemId(ItineraryItem item) { return item.kind() + "-" + item.ref_id(); }

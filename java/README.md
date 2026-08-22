@@ -32,3 +32,7 @@ The worker reads the shared root `.env`, including local Temporal/Postgres,
 Temporal Cloud API-key auth, model/research settings, checkout failure knobs,
 and `TOOL_DELAY_SECONDS`. The Java runbook does not currently configure an mTLS
 client; use API-key auth for Temporal Cloud.
+
+With `CHECKOUT_FAIL_HOTEL=true`, only the first approved checkout in an agent
+session injects the hotel failure and compensation path. Later checkout attempts
+in that same workflow run normally.

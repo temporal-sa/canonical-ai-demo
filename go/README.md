@@ -34,3 +34,7 @@ Configuration comes from the shared root `.env`. Supported settings include
 `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_API_KEY`, mTLS cert/key,
 `DB_URL`, `ANTHROPIC_MODEL`, research failure knobs, checkout failure knobs, and
 `TOOL_DELAY_SECONDS`.
+
+With `CHECKOUT_FAIL_HOTEL=true`, only the first approved checkout in an agent
+session injects the hotel failure and compensation path. Later checkout attempts
+in that same workflow run normally.

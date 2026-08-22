@@ -95,9 +95,15 @@ final class AgentActivitiesImpl implements AgentActivities {
   @Override
   public CheckoutReservation bookHotel(CheckoutStepRequest request) {
     pause(config.checkoutStepDelay());
-    if (config.checkoutFailHotel()) throw ApplicationFailure.newNonRetryableFailure(
-        "Hotel booking failed — the supplier returned no availability (injected demo failure).", "HotelBookingFailed");
+    if (shouldSimulateHotelFailure(config.checkoutFailHotel(), request.simulate_hotel_failure())) {
+      throw ApplicationFailure.newNonRetryableFailure(
+          "Hotel booking failed — the supplier returned no availability (injected demo failure).", "HotelBookingFailed");
+    }
     return reservation(request);
+  }
+
+  static boolean shouldSimulateHotelFailure(boolean enabled, boolean requestedForAttempt) {
+    return enabled && requestedForAttempt;
   }
 
   @Override public CheckoutReservation bookActivity(CheckoutStepRequest request) { pause(config.checkoutStepDelay()); return reservation(request); }

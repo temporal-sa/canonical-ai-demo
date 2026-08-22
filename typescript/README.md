@@ -79,7 +79,7 @@ Read by `src/config.ts` — the **same `.env`** the Python SDK uses.
 | `RESEARCH_SEARCHES` | `6` | parallel searches per research pass |
 | `WEB_SEARCH_MAX_USES` | `1` | web searches per search activity |
 | `WEB_SEARCH_FAIL_RATE` | `0.3` | injected retryable failure rate in the fan-out |
-| `CHECKOUT_FAIL_HOTEL` | `true` | fail the hotel step so checkout compensates the flight |
+| `CHECKOUT_FAIL_HOTEL` | `true` | fail the first checkout's hotel step so checkout compensates the flight |
 | `CHECKOUT_STEP_DELAY_SECONDS` | `1.0` | makes checkout steps easy to see in history |
 
 `LLM_PROVIDER` is ignored here (Anthropic-only).
@@ -103,7 +103,8 @@ typescript/
 
 Approve a trip containing a flight and hotel to run `CheckoutWorkflow`:
 `book_flight` succeeds, `book_hotel` fails, and `cancel_flight` compensates.
-Set `CHECKOUT_FAIL_HOTEL=false` for the successful commit path.
+Later checkout attempts in the same agent session run normally. Set
+`CHECKOUT_FAIL_HOTEL=false` to skip the first-attempt failure as well.
 
 ## Toolchain notes
 

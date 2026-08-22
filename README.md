@@ -166,8 +166,9 @@ make kill-db       # mid-turn: the tool activity retries with backoff (watch the
 make db            # …and the next retry just succeeds
 ```
 
-The checkout compensation path is deterministic by default. Set
-`CHECKOUT_FAIL_HOTEL=false` to demonstrate a successful checkout instead.
+The first checkout in an agent session takes the compensation path by default;
+later attempts run normally. Set `CHECKOUT_FAIL_HOTEL=false` to skip the
+first-attempt failure as well.
 
 Or open **Demo controls** (top-right) and flip the **LLM API** switch to simulate
 a provider outage — the current turn's LLM calls retry until you flip it back.

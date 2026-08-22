@@ -85,6 +85,10 @@ def _failure_message(e: ActivityError | ChildWorkflowError) -> str:
     return getattr(e.cause, "message", None) or "That action could not be completed."
 
 
+def simulate_hotel_failure_for_attempt(attempt: int) -> bool:
+    return attempt == 1
+
+
 @workflow.defn
 class TravelAgentWorkflow:
     def __init__(self) -> None:
@@ -394,6 +398,9 @@ class TravelAgentWorkflow:
                 account_key=self.account_key,
                 items=list(self.itinerary),
                 summary=summary,
+                simulate_hotel_failure=simulate_hotel_failure_for_attempt(
+                    self.checkout_attempt
+                ),
             ),
             id=checkout_id,
             static_summary="Agent-invoked durable checkout",

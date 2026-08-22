@@ -6,6 +6,7 @@ import { createHash } from 'crypto';
 import { ApplicationFailure } from '@temporalio/common';
 
 import * as config from '../config';
+import { shouldSimulateHotelFailure } from '../checkout-policy';
 import type {
   CheckoutRequest,
   CheckoutReservation,
@@ -39,7 +40,7 @@ export async function book_flight(req: CheckoutStepRequest): Promise<CheckoutRes
 
 export async function book_hotel(req: CheckoutStepRequest): Promise<CheckoutReservation> {
   await pause();
-  if (config.CHECKOUT_FAIL_HOTEL) {
+  if (shouldSimulateHotelFailure(config.CHECKOUT_FAIL_HOTEL, req.simulate_hotel_failure)) {
     throw ApplicationFailure.create({
       message:
         'Hotel booking failed — the supplier returned no availability (injected demo failure).',

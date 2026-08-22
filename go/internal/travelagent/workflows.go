@@ -291,7 +291,7 @@ func bookTrip(ctx workflow.Context, s *agentState) (toolOutcome, error) {
 	s.checkoutAttempt++
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: fmt.Sprintf("%s-checkout-%d", s.accountKey, s.checkoutAttempt)})
 	var checkout CheckoutResult
-	err = workflow.ExecuteChildWorkflow(childCtx, "CheckoutWorkflow", CheckoutRequest{AccountKey: s.accountKey, Items: append([]ItineraryItem(nil), s.itinerary...), Summary: summary}).Get(ctx, &checkout)
+	err = workflow.ExecuteChildWorkflow(childCtx, "CheckoutWorkflow", checkoutRequestForAttempt(s.accountKey, s.itinerary, summary, s.checkoutAttempt)).Get(ctx, &checkout)
 	if err != nil {
 		return toolOutcome{}, err
 	}
@@ -299,6 +299,15 @@ func bookTrip(ctx workflow.Context, s *agentState) (toolOutcome, error) {
 		s.itinerary = []ItineraryItem{}
 	}
 	return toolOutcome{Result: jsonString(checkout)}, nil
+}
+
+func checkoutRequestForAttempt(accountKey string, itinerary []ItineraryItem, summary string, attempt int) CheckoutRequest {
+	return CheckoutRequest{
+		AccountKey:           accountKey,
+		Items:                append([]ItineraryItem(nil), itinerary...),
+		Summary:              summary,
+		SimulateHotelFailure: attempt == 1,
+	}
 }
 
 func createInvoice(ctx workflow.Context, s *agentState, call ToolCall) (toolOutcome, error) {
@@ -338,7 +347,9 @@ func CheckoutWorkflow(ctx workflow.Context, req CheckoutRequest) (CheckoutResult
 				continue
 			}
 			var reservation CheckoutReservation
-			err := workflow.ExecuteActivity(ctx, activityByKind[kind], CheckoutStepRequest{AccountKey: req.AccountKey, Item: item}).Get(ctx, &reservation)
+			err := workflow.ExecuteActivity(ctx, activityByKind[kind], CheckoutStepRequest{
+				AccountKey: req.AccountKey, Item: item, SimulateHotelFailure: req.SimulateHotelFailure,
+			}).Get(ctx, &reservation)
 			if err != nil {
 				return compensateCheckout(ctx, req, reservations, err), nil
 			}

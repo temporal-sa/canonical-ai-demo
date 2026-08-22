@@ -57,14 +57,16 @@ type ItineraryItem struct {
 }
 
 type CheckoutRequest struct {
-	AccountKey string          `json:"account_key"`
-	Items      []ItineraryItem `json:"items"`
-	Summary    string          `json:"summary"`
+	AccountKey           string          `json:"account_key"`
+	Items                []ItineraryItem `json:"items"`
+	Summary              string          `json:"summary"`
+	SimulateHotelFailure bool            `json:"simulate_hotel_failure"`
 }
 
 type CheckoutStepRequest struct {
-	AccountKey string        `json:"account_key"`
-	Item       ItineraryItem `json:"item"`
+	AccountKey           string        `json:"account_key"`
+	Item                 ItineraryItem `json:"item"`
+	SimulateHotelFailure bool          `json:"simulate_hotel_failure"`
 }
 
 type CheckoutReservation struct {

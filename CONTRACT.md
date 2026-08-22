@@ -42,7 +42,8 @@ After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
 {
   "account_key": "trip-…",
   "items": [ { "kind": "flight", "ref_id": 1, "title": "…", "subtitle": "…", "price": 250 } ],
-  "summary": "2 item(s) — $450.00"
+  "summary": "2 item(s) — $450.00",
+  "simulate_hotel_failure": true
 }
 
 // CheckoutResult
@@ -59,9 +60,12 @@ After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
 
 The child reserves flights, hotels, and activities in that order. If a step
 fails it compensates completed reservations in reverse order. For the default
-demo configuration, `book_flight` succeeds, `book_hotel` raises the
+demo configuration, the first checkout attempt sets
+`simulate_hotel_failure: true`: `book_flight` succeeds, `book_hotel` raises the
 non-retryable `HotelBookingFailed`, and `cancel_flight` succeeds. The child then
 returns `status: "compensated"`; it does not fail the long-lived agent workflow.
+Later checkout attempts in the same agent session set the flag to `false` and
+run normally.
 
 ---
 

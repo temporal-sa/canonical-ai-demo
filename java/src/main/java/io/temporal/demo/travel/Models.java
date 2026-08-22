@@ -49,9 +49,13 @@ public final class Models {
   public record CheckoutRequest(
       String account_key,
       List<ItineraryItem> items,
-      String summary) {}
+      String summary,
+      boolean simulate_hotel_failure) {}
 
-  public record CheckoutStepRequest(String account_key, ItineraryItem item) {}
+  public record CheckoutStepRequest(
+      String account_key,
+      ItineraryItem item,
+      boolean simulate_hotel_failure) {}
 
   public record CheckoutReservation(
       String kind,

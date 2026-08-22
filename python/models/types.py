@@ -107,11 +107,13 @@ class CheckoutRequest(BaseModel):
     account_key: str
     items: list[ItineraryItem]
     summary: str
+    simulate_hotel_failure: bool = False
 
 
 class CheckoutStepRequest(BaseModel):
     account_key: str
     item: ItineraryItem
+    simulate_hotel_failure: bool = False
 
 
 class CheckoutReservation(BaseModel):

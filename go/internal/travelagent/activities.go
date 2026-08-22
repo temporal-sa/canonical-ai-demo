@@ -292,7 +292,7 @@ func (a *Activities) BookHotel(ctx context.Context, req CheckoutStepRequest) (Ch
 	if a.cfg.CheckoutStepDelay > 0 {
 		time.Sleep(a.cfg.CheckoutStepDelay)
 	}
-	if a.cfg.CheckoutFailHotel {
+	if a.cfg.CheckoutFailHotel && req.SimulateHotelFailure {
 		return CheckoutReservation{}, temporal.NewNonRetryableApplicationError("Hotel booking failed — the supplier returned no availability (injected demo failure).", "HotelBookingFailed", nil)
 	}
 	return reservation(req), nil

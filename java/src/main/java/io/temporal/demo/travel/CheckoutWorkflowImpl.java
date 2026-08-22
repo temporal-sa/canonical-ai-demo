@@ -29,7 +29,8 @@ public class CheckoutWorkflowImpl implements CheckoutWorkflow {
       for (String kind : List.of("flight", "hotel", "activity")) {
         for (ItineraryItem item : request.items()) {
           if (!kind.equals(item.kind())) continue;
-          CheckoutStepRequest step = new CheckoutStepRequest(request.account_key(), item);
+          CheckoutStepRequest step = new CheckoutStepRequest(
+              request.account_key(), item, request.simulate_hotel_failure());
           reservations.add(switch (kind) {
             case "flight" -> activities.bookFlight(step);
             case "hotel" -> activities.bookHotel(step);

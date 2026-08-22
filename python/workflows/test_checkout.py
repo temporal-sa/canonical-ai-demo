@@ -7,9 +7,15 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from activities import checkout as checkout_activities
-from models.types import CheckoutRequest, ItineraryItem
-from workflows.agent import TravelAgentWorkflow
+from models.types import CheckoutRequest, CheckoutStepRequest, ItineraryItem
+from workflows.agent import TravelAgentWorkflow, simulate_hotel_failure_for_attempt
 from workflows.checkout import CheckoutWorkflow
+
+
+class CheckoutPolicyTests(unittest.TestCase):
+    def test_only_first_attempt_requests_simulated_failure(self) -> None:
+        self.assertTrue(simulate_hotel_failure_for_attempt(1))
+        self.assertFalse(simulate_hotel_failure_for_attempt(2))
 
 
 class CheckoutWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -53,6 +59,7 @@ class CheckoutWorkflowTests(unittest.IsolatedAsyncioTestCase):
                         CheckoutRequest(
                             account_key="trip-test",
                             summary="2 item(s) — $450.00",
+                            simulate_hotel_failure=True,
                             items=[
                                 ItineraryItem(
                                     kind="flight",
@@ -95,6 +102,30 @@ class CheckoutWorkflowTests(unittest.IsolatedAsyncioTestCase):
             ["book_flight", "book_hotel", "cancel_flight"],
             activity_types,
         )
+
+    async def test_later_attempt_does_not_inject_hotel_failure(self) -> None:
+        previous_failure = checkout_activities.config.CHECKOUT_FAIL_HOTEL
+        previous_delay = checkout_activities.config.CHECKOUT_STEP_DELAY_SECONDS
+        checkout_activities.config.CHECKOUT_FAIL_HOTEL = True
+        checkout_activities.config.CHECKOUT_STEP_DELAY_SECONDS = 0
+        try:
+            reservation = checkout_activities.book_hotel(
+                CheckoutStepRequest(
+                    account_key="trip-test",
+                    item=ItineraryItem(
+                        kind="hotel",
+                        ref_id=202,
+                        title="Demo Hotel",
+                        price=200,
+                    ),
+                    simulate_hotel_failure=False,
+                )
+            )
+        finally:
+            checkout_activities.config.CHECKOUT_FAIL_HOTEL = previous_failure
+            checkout_activities.config.CHECKOUT_STEP_DELAY_SECONDS = previous_delay
+
+        self.assertEqual("booked", reservation.status)
 
 
 if __name__ == "__main__":

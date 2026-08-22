@@ -63,11 +63,13 @@ export interface CheckoutRequest {
   account_key: string;
   items: ItineraryItem[];
   summary: string;
+  simulate_hotel_failure: boolean;
 }
 
 export interface CheckoutStepRequest {
   account_key: string;
   item: ItineraryItem;
+  simulate_hotel_failure: boolean;
 }
 
 export interface CheckoutReservation {

@@ -29,6 +29,7 @@ import {
 } from '@temporalio/workflow';
 import type { RetryPolicy } from '@temporalio/common';
 import type * as activities from './activities';
+import { simulateHotelFailureForAttempt } from './checkout-policy';
 import { systemPrompt } from './prompts';
 import type {
   ApprovalDecision,
@@ -322,6 +323,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
       account_key: accountKey,
       items: [...itinerary],
       summary,
+      simulate_hotel_failure: simulateHotelFailureForAttempt(checkoutAttempt),
     };
     const checkout = await executeChild(CheckoutWorkflow, {
       args: [checkoutRequest],
