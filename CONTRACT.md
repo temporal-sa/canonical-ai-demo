@@ -1,7 +1,7 @@
 # The SDK contract
 
 This demo is **multi-SDK**. The worker (the durable agent) can be written in any
-Temporal SDK — Python today, TypeScript next — while the **gateway + web UI stay
+Temporal SDK — Python, TypeScript, Go, or Java — while the **gateway + web UI stay
 the same**. That works because `web/gateway.py` imports **zero** worker code: it
 drives the workflow purely by **string names** over the Temporal client.
 
@@ -177,6 +177,8 @@ Each SDK is a self-contained sibling folder implementing this contract:
 ```
 python/       # the reference implementation (also the only one with Docker files)
 typescript/   # local-runnable TS worker
+go/           # local-runnable Go worker
+java/         # local-runnable Java worker
 web/          # gateway + UI — SDK-agnostic, shared by all
 db/           # seed data — SDK-agnostic, shared by all
 ```

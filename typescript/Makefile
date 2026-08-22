@@ -11,7 +11,7 @@
 # only the worker differs. Shared infra lives in ../make/common.mk.
 
 SDK := typescript
-OTHER_WORKER_PATTERNS := worker.py
+OTHER_WORKER_PATTERNS := worker.py travel-worker-go travel-agent-java-0.1.0.jar
 WORKER_STATUS = pgrep -f "src/worker.ts" >/dev/null 2>&1 && echo "running (typescript)" || echo "stopped"
 
 include ../make/common.mk

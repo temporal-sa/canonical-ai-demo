@@ -8,7 +8,7 @@
 # Shared infra (postgres/temporal/gateway/web) lives in ../make/common.mk.
 
 SDK := python
-OTHER_WORKER_PATTERNS := src/worker.ts
+OTHER_WORKER_PATTERNS := src/worker.ts travel-worker-go travel-agent-java-0.1.0.jar
 WORKER_STATUS = pgrep -f "worker.py" >/dev/null 2>&1 && echo "running (python)" || echo "stopped"
 
 include ../make/common.mk

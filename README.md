@@ -45,9 +45,12 @@ its own `make up`:
 |-----|---------|-------|
 | Python | [`python/README.md`](python/README.md) | reference implementation; the only one that also deploys (`docker/`) |
 | TypeScript | [`typescript/README.md`](typescript/README.md) | local-runnable only; Anthropic-only |
+| Go | [`go/README.md`](go/README.md) | local-runnable only; Anthropic-only |
+| Java | [`java/README.md`](java/README.md) | local-runnable only; Anthropic-only |
 
 Only **one** SDK's worker polls the shared `travel-agent` queue at a time. Root
-`make up` runs the Python SDK; `cd typescript && make up` runs that one instead.
+`make up` runs Python. Run `make up` from `typescript/`, `go/`, or `java/` to
+use that worker instead.
 
 ---
 

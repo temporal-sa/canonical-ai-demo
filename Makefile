@@ -3,6 +3,8 @@
 #
 #   cd python     && make up      # the primary/deployable SDK
 #   cd typescript && make up       # local-only TS worker
+#   cd go         && make up       # local-only Go worker
+#   cd java       && make up       # local-only Java worker
 #
 # For convenience, running make FROM THE REPO ROOT forwards to the Python SDK,
 # so the familiar commands still work unchanged:
@@ -11,7 +13,7 @@
 #
 # Only ONE SDK's worker may poll the `travel-agent` queue at a time (a history
 # written by one SDK can't be replayed by another). Switch SDKs from their
-# folders: `cd python && make kill-worker` then `cd typescript && make up`.
+# folders: `cd python && make kill-worker` then `cd go && make up`, for example.
 
 .DEFAULT_GOAL := up
 
