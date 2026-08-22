@@ -2,7 +2,12 @@ package travelagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
+
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
 )
 
 func TestGatewayDTOsUseSnakeCase(t *testing.T) {
@@ -34,5 +39,42 @@ func TestToolCatalogMatchesContract(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("missing tools: %v", want)
+	}
+}
+
+func TestTravelAgentWorkflowRegistersGatewayQueries(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	var queryErr error
+	env.RegisterDelayedCallback(func() {
+		queries := []struct {
+			name   string
+			result any
+		}{
+			{"is_llm_down", new(bool)},
+			{"transcript", new([]ChatMessage)},
+			{"pending_approval", new(*PendingConfirmation)},
+			{"research_status", new(ResearchStatus)},
+			{"itinerary_view", new([]ItineraryItem)},
+		}
+		for _, query := range queries {
+			value, err := env.QueryWorkflow(query.name)
+			if err == nil {
+				err = value.Get(query.result)
+			}
+			if err != nil {
+				queryErr = fmt.Errorf("query %s: %w", query.name, err)
+				break
+			}
+		}
+		env.CancelWorkflow()
+	}, time.Second)
+
+	env.ExecuteWorkflow(TravelAgentWorkflow, "traveller@example.com")
+	if queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	if err := env.GetWorkflowError(); !temporal.IsCanceledError(err) {
+		t.Fatalf("workflow should reach its wait state and then be cancelled, got %v", err)
 	}
 }

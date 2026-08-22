@@ -117,21 +117,21 @@ func installHandlers(ctx workflow.Context, s *agentState) error {
 		name    string
 		handler any
 	}{
-		{"is_llm_down", func() bool { return s.llmDown }},
-		{"transcript", func() []ChatMessage {
+		{"is_llm_down", func() (bool, error) { return s.llmDown, nil }},
+		{"transcript", func() ([]ChatMessage, error) {
 			out := []ChatMessage{}
 			for _, message := range s.messages {
 				if (message.Role == "user" || message.Role == "assistant") && message.Content != "" {
 					out = append(out, message)
 				}
 			}
-			return out
+			return out, nil
 		}},
-		{"pending_approval", func() *PendingConfirmation { return s.pendingConfirmation }},
-		{"research_status", func() ResearchStatus {
-			return ResearchStatus{Phase: s.phase, Plan: s.plan, SearchesTotal: s.searchesTotal, SearchesDone: s.searchesDone}
+		{"pending_approval", func() (*PendingConfirmation, error) { return s.pendingConfirmation, nil }},
+		{"research_status", func() (ResearchStatus, error) {
+			return ResearchStatus{Phase: s.phase, Plan: s.plan, SearchesTotal: s.searchesTotal, SearchesDone: s.searchesDone}, nil
 		}},
-		{"itinerary_view", func() []ItineraryItem { return s.itinerary }},
+		{"itinerary_view", func() ([]ItineraryItem, error) { return s.itinerary, nil }},
 	}
 	for _, query := range queries {
 		if err := workflow.SetQueryHandler(ctx, query.name, query.handler); err != nil {
