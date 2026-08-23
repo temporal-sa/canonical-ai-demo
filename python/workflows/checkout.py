@@ -63,7 +63,11 @@ class CheckoutWorkflow:
                         continue
                     reservation = await workflow.execute_activity(
                         booking_activity,
-                        CheckoutStepRequest(account_key=request.account_key, item=item),
+                        CheckoutStepRequest(
+                            account_key=request.account_key,
+                            item=item,
+                            simulate_hotel_failure=request.simulate_hotel_failure,
+                        ),
                         start_to_close_timeout=timedelta(seconds=30),
                         retry_policy=CHECKOUT_RETRY,
                         summary=f"Book {kind}: {item.title}",

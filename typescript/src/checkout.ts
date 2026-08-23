@@ -15,6 +15,7 @@ import type {
   CheckoutRequest,
   CheckoutReservation,
   CheckoutResult,
+  CheckoutStepRequest,
   ItineraryItem,
 } from './types';
 
@@ -45,7 +46,7 @@ export async function CheckoutWorkflow(request: CheckoutRequest): Promise<Checko
     // activities. Each function call becomes a durable Activity in history.
     const steps: Array<[
       ItineraryItem['kind'],
-      (req: { account_key: string; item: ItineraryItem }) => Promise<CheckoutReservation>,
+      (req: CheckoutStepRequest) => Promise<CheckoutReservation>,
     ]> = [
       ['flight', checkoutActivities.book_flight],
       ['hotel', checkoutActivities.book_hotel],
@@ -55,7 +56,11 @@ export async function CheckoutWorkflow(request: CheckoutRequest): Promise<Checko
     for (const [kind, book] of steps) {
       for (const item of request.items) {
         if (item.kind !== kind) continue;
-        reservations.push(await book({ account_key: request.account_key, item }));
+        reservations.push(await book({
+          account_key: request.account_key,
+          item,
+          simulate_hotel_failure: request.simulate_hotel_failure,
+        }));
       }
     }
 

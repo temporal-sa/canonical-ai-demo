@@ -2,8 +2,9 @@
 
 These small Activities stand in for airline, hotel, and attraction APIs. Their
 reservation IDs are idempotent so an Activity retry cannot create a duplicate.
-The hotel failure is enabled by default for the live compensation demo; set
-``CHECKOUT_FAIL_HOTEL=false`` to exercise the successful checkout path.
+The first checkout's hotel failure is enabled by default for the live
+compensation demo; later attempts succeed. Set ``CHECKOUT_FAIL_HOTEL=false``
+to skip the injected failure entirely.
 """
 
 import hashlib
@@ -51,7 +52,7 @@ def book_flight(req: CheckoutStepRequest) -> CheckoutReservation:
 @activity.defn
 def book_hotel(req: CheckoutStepRequest) -> CheckoutReservation:
     _pause()
-    if config.CHECKOUT_FAIL_HOTEL:
+    if config.CHECKOUT_FAIL_HOTEL and req.simulate_hotel_failure:
         raise ApplicationError(
             "Hotel booking failed — the supplier returned no availability "
             "(injected demo failure).",

@@ -5,7 +5,8 @@
   "description": "TypeScript worker for the canonical Temporal travel-agent demo. Implements the SDK contract in ../CONTRACT.md.",
   "scripts": {
     "worker": "ts-node src/worker.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "ts-node src/checkout-policy.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "~0.116.0",

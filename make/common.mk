@@ -8,7 +8,7 @@
 #
 # A per-SDK Makefile looks like:
 #     SDK := typescript
-#     OTHER_WORKER_PATTERNS := worker.py          # other SDKs' worker processes
+#     OTHER_WORKER_PATTERNS := worker.py travel-worker-go  # other SDK workers
 #     WORKER_STATUS = pgrep -f "src/worker.ts" ... # one line for `make status`
 #     include ../make/common.mk
 #     worker: guard-single-sdk ; <start this SDK's worker>

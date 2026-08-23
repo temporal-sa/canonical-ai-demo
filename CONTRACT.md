@@ -1,7 +1,7 @@
 # The SDK contract
 
 This demo is **multi-SDK**. The worker (the durable agent) can be written in any
-Temporal SDK — Python today, TypeScript next — while the **gateway + web UI stay
+Temporal SDK — Python, TypeScript, Go, or Java — while the **gateway + web UI stay
 the same**. That works because `web/gateway.py` imports **zero** worker code: it
 drives the workflow purely by **string names** over the Temporal client.
 
@@ -42,7 +42,8 @@ After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
 {
   "account_key": "trip-…",
   "items": [ { "kind": "flight", "ref_id": 1, "title": "…", "subtitle": "…", "price": 250 } ],
-  "summary": "2 item(s) — $450.00"
+  "summary": "2 item(s) — $450.00",
+  "simulate_hotel_failure": true
 }
 
 // CheckoutResult
@@ -59,9 +60,12 @@ After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
 
 The child reserves flights, hotels, and activities in that order. If a step
 fails it compensates completed reservations in reverse order. For the default
-demo configuration, `book_flight` succeeds, `book_hotel` raises the
+demo configuration, the first checkout attempt sets
+`simulate_hotel_failure: true`: `book_flight` succeeds, `book_hotel` raises the
 non-retryable `HotelBookingFailed`, and `cancel_flight` succeeds. The child then
 returns `status: "compensated"`; it does not fail the long-lived agent workflow.
+Later checkout attempts in the same agent session set the flag to `false` and
+run normally.
 
 ---
 
@@ -177,6 +181,8 @@ Each SDK is a self-contained sibling folder implementing this contract:
 ```
 python/       # the reference implementation (also the only one with Docker files)
 typescript/   # local-runnable TS worker
+go/           # local-runnable Go worker
+java/         # local-runnable Java worker
 web/          # gateway + UI — SDK-agnostic, shared by all
 db/           # seed data — SDK-agnostic, shared by all
 ```
