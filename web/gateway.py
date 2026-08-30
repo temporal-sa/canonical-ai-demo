@@ -21,12 +21,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 from pydantic import BaseModel
 from temporalio.client import Client, TLSConfig, WorkflowUpdateFailedError
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import RPCError, RPCStatusCode
 
-# ── config (env only; the gateway's own — it doesn't import the SDK folders) ──
+# Load repo-root .env (shared demoer quick-switch), then local overrides.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv()
+
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
 TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
 TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
