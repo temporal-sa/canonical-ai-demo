@@ -21,8 +21,8 @@ export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233'
 export const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 
 const TEMPORAL_API_KEY = process.env.TEMPORAL_API_KEY;
-const TEMPORAL_TLS_CERT = process.env.TEMPORAL_TLS_CERT;
-const TEMPORAL_TLS_KEY = process.env.TEMPORAL_TLS_KEY;
+const TEMPORAL_TLS_CLIENT_CERT_PATH = process.env.TEMPORAL_TLS_CLIENT_CERT_PATH;
+const TEMPORAL_TLS_CLIENT_KEY_PATH = process.env.TEMPORAL_TLS_CLIENT_KEY_PATH;
 
 // ── Database — a full DB_URL (local docker compose) OR discrete DB_* parts. ──
 function dbUrl(): string {

@@ -19,8 +19,8 @@ TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
 TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
 TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
-TEMPORAL_TLS_CERT = os.getenv("TEMPORAL_TLS_CERT")
-TEMPORAL_TLS_KEY = os.getenv("TEMPORAL_TLS_KEY")
+TEMPORAL_TLS_CLIENT_CERT_PATH = os.getenv("TEMPORAL_TLS_CLIENT_CERT_PATH")
+TEMPORAL_TLS_CLIENT_KEY_PATH = os.getenv("TEMPORAL_TLS_CLIENT_KEY_PATH")
 
 # Database — a full DB_URL (local `docker compose`) OR discrete DB_* parts
 # (EKS: the platform injects DB_HOST + a DB_PASSWORD secret, so we compose it —
