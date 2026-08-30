@@ -17,7 +17,7 @@ public final class WorkerMain {
     if (!config.temporalApiKey().isBlank()) {
       serviceOptions
           .setEnableHttps(true)
-          .addApiKey(() -> "Bearer " + config.temporalApiKey());
+          .addApiKey(() -> config.temporalApiKey());
     }
     if (!config.temporalTlsCert().isBlank() || !config.temporalTlsKey().isBlank()) {
       throw new IllegalArgumentException("The Java local worker currently supports Temporal Cloud API-key auth; mTLS is not configured in this runbook.");
