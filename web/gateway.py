@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from temporalio.client import Client, TLSConfig, WorkflowUpdateFailedError
+from temporalio.envconfig import ClientConfig
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -53,16 +54,11 @@ def temporal_ui_base() -> str:
 
 
 async def _connect() -> Client:
-    common = {"namespace": TEMPORAL_NAMESPACE, "data_converter": pydantic_data_converter}
-    if TEMPORAL_API_KEY:
-        return await Client.connect(TEMPORAL_ADDRESS, api_key=TEMPORAL_API_KEY, tls=True, **common)
-    if TEMPORAL_TLS_CERT and TEMPORAL_TLS_KEY:
-        tls = TLSConfig(
-            client_cert=Path(TEMPORAL_TLS_CERT).read_bytes(),
-            client_private_key=Path(TEMPORAL_TLS_KEY).read_bytes(),
-        )
-        return await Client.connect(TEMPORAL_ADDRESS, tls=tls, **common)
-    return await Client.connect(TEMPORAL_ADDRESS, **common)
+    config = ClientConfig.load_client_connect_config()
+    return await Client.connect(
+        **config,
+        data_converter=pydantic_data_converter,
+    )
 
 
 @asynccontextmanager

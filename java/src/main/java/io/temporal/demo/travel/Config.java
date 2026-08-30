@@ -26,7 +26,8 @@ public record Config(
     boolean checkoutFailHotel,
     Duration checkoutStepDelay,
     Duration toolDelay,
-    String anthropicMessagesUrl) {
+    String anthropicMessagesUrl,
+    Map<String, String> envValues) {
 
   public static Config load() {
     Map<String, String> values = new HashMap<>();
@@ -51,7 +52,9 @@ public record Config(
         bool(values, "CHECKOUT_FAIL_HOTEL", true),
         seconds(values, "CHECKOUT_STEP_DELAY_SECONDS", 1.0),
         seconds(values, "TOOL_DELAY_SECONDS", 1.0),
-        get(values, "ANTHROPIC_MESSAGES_URL", "https://api.anthropic.com/v1/messages"));
+        get(values, "ANTHROPIC_MESSAGES_URL", "https://api.anthropic.com/v1/messages"),
+        values
+    );
   }
 
   private static void loadDotEnv(Path path, Map<String, String> values) {

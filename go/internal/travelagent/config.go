@@ -1,7 +1,6 @@
 package travelagent
 
 import (
-	"crypto/tls"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/envconfig"
 )
 
 type Config struct {
@@ -60,23 +60,7 @@ func LoadConfig() Config {
 }
 
 func DialTemporal(cfg Config) (client.Client, error) {
-	opts := client.Options{
-		HostPort:  cfg.TemporalAddress,
-		Namespace: cfg.TemporalNamespace,
-	}
-	if cfg.TemporalAPIKey != "" {
-		opts.Credentials = client.NewAPIKeyStaticCredentials(cfg.TemporalAPIKey)
-		opts.ConnectionOptions.TLS = &tls.Config{MinVersion: tls.VersionTLS12}
-	} else if cfg.TemporalTLSCert != "" && cfg.TemporalTLSKey != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.TemporalTLSCert, cfg.TemporalTLSKey)
-		if err != nil {
-			return nil, fmt.Errorf("load Temporal mTLS certificate: %w", err)
-		}
-		opts.ConnectionOptions.TLS = &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		}
-	}
+	opts := envconfig.MustLoadDefaultClientOptions()
 	return client.Dial(opts)
 }
 
