@@ -34,9 +34,6 @@ load_dotenv()
 
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
 TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
-TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
-TEMPORAL_TLS_CLIENT_CERT_PATH = os.getenv("TEMPORAL_TLS_CLIENT_CERT_PATH")
-TEMPORAL_TLS_CLIENT_KEY_PATH = os.getenv("TEMPORAL_TLS_CLIENT_KEY_PATH")
 TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel-agent")
 WORKFLOW_TYPE = os.getenv("WORKFLOW_TYPE", "TravelAgentWorkflow")
 DEFAULT_TRAVELLER_EMAIL = os.getenv("DEFAULT_TRAVELLER_EMAIL", "sa@temporal.io")
@@ -54,6 +51,7 @@ def temporal_ui_base() -> str:
 
 
 async def _connect() -> Client:
+   	# TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
     config = ClientConfig.load_client_connect_config()
     return await Client.connect(
         **config,

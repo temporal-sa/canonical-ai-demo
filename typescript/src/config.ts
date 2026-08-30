@@ -15,14 +15,12 @@ dotenv.config();
 // feature injects (<base>-<workspace-id>); fall back to legacy TASK_QUEUE, then
 // the shared default. Mirrors python/config.py.
 export const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? process.env.TASK_QUEUE ?? 'travel-agent';
+
+// TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
 export const CLIENT_CONFIG = loadClientConnectConfig();
 
 export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
 export const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
-
-const TEMPORAL_API_KEY = process.env.TEMPORAL_API_KEY;
-const TEMPORAL_TLS_CLIENT_CERT_PATH = process.env.TEMPORAL_TLS_CLIENT_CERT_PATH;
-const TEMPORAL_TLS_CLIENT_KEY_PATH = process.env.TEMPORAL_TLS_CLIENT_KEY_PATH;
 
 // ── Database — a full DB_URL (local docker compose) OR discrete DB_* parts. ──
 function dbUrl(): string {

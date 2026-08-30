@@ -16,9 +16,6 @@ type Config struct {
 	TaskQueue            string
 	TemporalAddress      string
 	TemporalNamespace    string
-	TemporalAPIKey       string
-	TemporalTLSCert      string
-	TemporalTLSKey       string
 	DBURL                string
 	LLMProvider          string
 	AnthropicAPIKey      string
@@ -42,9 +39,6 @@ func LoadConfig() Config {
 		TaskQueue:            firstEnv("TEMPORAL_TASK_QUEUE", "TASK_QUEUE", "travel-agent"),
 		TemporalAddress:      envOr("TEMPORAL_ADDRESS", "localhost:7233"),
 		TemporalNamespace:    envOr("TEMPORAL_NAMESPACE", "default"),
-		TemporalAPIKey:       os.Getenv("TEMPORAL_API_KEY"),
-		TemporalTLSCert:      os.Getenv("TEMPORAL_TLS_CLIENT_CERT_PATH"),
-		TemporalTLSKey:       os.Getenv("TEMPORAL_TLS_CLIENT_KEY_PATH"),
 		DBURL:                databaseURL(),
 		LLMProvider:          envOr("LLM_PROVIDER", "anthropic"),
 		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
@@ -60,6 +54,7 @@ func LoadConfig() Config {
 }
 
 func DialTemporal(cfg Config) (client.Client, error) {
+	// TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
 	opts := envconfig.MustLoadDefaultClientOptions()
 	return client.Dial(opts)
 }

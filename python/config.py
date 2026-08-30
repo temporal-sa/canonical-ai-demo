@@ -18,9 +18,6 @@ TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel
 # Temporal connection — local dev server by default; Temporal Cloud via env.
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
 TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
-TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
-TEMPORAL_TLS_CLIENT_CERT_PATH = os.getenv("TEMPORAL_TLS_CLIENT_CERT_PATH")
-TEMPORAL_TLS_CLIENT_KEY_PATH = os.getenv("TEMPORAL_TLS_CLIENT_KEY_PATH")
 
 # Database — a full DB_URL (local `docker compose`) OR discrete DB_* parts
 # (EKS: the platform injects DB_HOST + a DB_PASSWORD secret, so we compose it —
@@ -85,6 +82,7 @@ async def temporal_client():
     from temporalio.envconfig import ClientConfig
     from temporalio.contrib.pydantic import pydantic_data_converter
 
+	# TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
     config = ClientConfig.load_client_connect_config()
     return await Client.connect(
         **config,

@@ -13,9 +13,6 @@ public record Config(
     String taskQueue,
     String temporalAddress,
     String temporalNamespace,
-    String temporalApiKey,
-    String temporalTlsCert,
-    String temporalTlsKey,
     String dbUrl,
     String llmProvider,
     String anthropicApiKey,
@@ -39,9 +36,6 @@ public record Config(
         taskQueue,
         get(values, "TEMPORAL_ADDRESS", "localhost:7233"),
         get(values, "TEMPORAL_NAMESPACE", "default"),
-        get(values, "TEMPORAL_API_KEY", ""),
-        get(values, "TEMPORAL_TLS_CLIENT_CERT_PATH", ""),
-        get(values, "TEMPORAL_TLS_CLIENT_KEY_PATH", ""),
         databaseUrl(values),
         get(values, "LLM_PROVIDER", "anthropic"),
         get(values, "ANTHROPIC_API_KEY", ""),
@@ -53,7 +47,7 @@ public record Config(
         seconds(values, "CHECKOUT_STEP_DELAY_SECONDS", 1.0),
         seconds(values, "TOOL_DELAY_SECONDS", 1.0),
         get(values, "ANTHROPIC_MESSAGES_URL", "https://api.anthropic.com/v1/messages"),
-        values
+        values // TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* will be passed though to envconfig if present
     );
   }
 
