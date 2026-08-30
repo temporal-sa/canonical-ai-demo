@@ -8,19 +8,17 @@ import { Client, Connection } from '@temporalio/client';
 import { loadClientConnectConfig } from '@temporalio/envconfig';
 
 // repo-root .env first (shared demoer quick-switch), then a local override.
-dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env'), override: true });
+dotenv.config({ override: true });
 
 // TEMPORAL_TASK_QUEUE is what the demo-cloud registry's crashable-workspace
 // feature injects (<base>-<workspace-id>); fall back to legacy TASK_QUEUE, then
 // the shared default. Mirrors python/config.py.
 export const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? process.env.TASK_QUEUE ?? 'travel-agent';
 
-// TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
+// TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+// env vars are loaded directly by envconfig
 export const CLIENT_CONFIG = loadClientConnectConfig();
-
-export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
-export const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 
 // ── Database — a full DB_URL (local docker compose) OR discrete DB_* parts. ──
 function dbUrl(): string {

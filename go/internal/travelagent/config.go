@@ -13,9 +13,8 @@ import (
 )
 
 type Config struct {
+	TemporalClientOpts   client.Options
 	TaskQueue            string
-	TemporalAddress      string
-	TemporalNamespace    string
 	DBURL                string
 	LLMProvider          string
 	AnthropicAPIKey      string
@@ -32,13 +31,14 @@ type Config struct {
 func LoadConfig() Config {
 	// The runbook starts the worker from go/, so ../.env is the shared config.
 	// A local .env is loaded second as a convenient SDK-specific override.
-	_ = godotenv.Load("../.env")
+	_ = godotenv.Overload("../.env")
 	_ = godotenv.Overload(".env")
 
 	return Config{
+		// TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+		// env vars are loaded directly by envconfig
+		TemporalClientOpts:   envconfig.MustLoadDefaultClientOptions(),
 		TaskQueue:            firstEnv("TEMPORAL_TASK_QUEUE", "TASK_QUEUE", "travel-agent"),
-		TemporalAddress:      envOr("TEMPORAL_ADDRESS", "localhost:7233"),
-		TemporalNamespace:    envOr("TEMPORAL_NAMESPACE", "default"),
 		DBURL:                databaseURL(),
 		LLMProvider:          envOr("LLM_PROVIDER", "anthropic"),
 		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
@@ -54,9 +54,7 @@ func LoadConfig() Config {
 }
 
 func DialTemporal(cfg Config) (client.Client, error) {
-	// TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
-	opts := envconfig.MustLoadDefaultClientOptions()
-	return client.Dial(opts)
+	return client.Dial(cfg.TemporalClientOpts)
 }
 
 func firstEnv(names ...string) string {

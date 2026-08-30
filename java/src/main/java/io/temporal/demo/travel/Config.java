@@ -11,8 +11,6 @@ import java.util.Map;
 
 public record Config(
     String taskQueue,
-    String temporalAddress,
-    String temporalNamespace,
     String dbUrl,
     String llmProvider,
     String anthropicApiKey,
@@ -27,15 +25,12 @@ public record Config(
     Map<String, String> envValues) {
 
   public static Config load() {
-    Map<String, String> values = new HashMap<>();
+    Map<String, String> values = new HashMap<>(System.getenv());
     loadDotEnv(Path.of("../.env"), values);
     loadDotEnv(Path.of(".env"), values);
-    values.putAll(System.getenv());
     String taskQueue = first(values, List.of("TEMPORAL_TASK_QUEUE", "TASK_QUEUE"), "travel-agent");
     return new Config(
         taskQueue,
-        get(values, "TEMPORAL_ADDRESS", "localhost:7233"),
-        get(values, "TEMPORAL_NAMESPACE", "default"),
         databaseUrl(values),
         get(values, "LLM_PROVIDER", "anthropic"),
         get(values, "ANTHROPIC_API_KEY", ""),
@@ -47,7 +42,7 @@ public record Config(
         seconds(values, "CHECKOUT_STEP_DELAY_SECONDS", 1.0),
         seconds(values, "TOOL_DELAY_SECONDS", 1.0),
         get(values, "ANTHROPIC_MESSAGES_URL", "https://api.anthropic.com/v1/messages"),
-        values // TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* will be passed though to envconfig if present
+        values // TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_ env vars will be loaded directly by envconfig
     );
   }
 

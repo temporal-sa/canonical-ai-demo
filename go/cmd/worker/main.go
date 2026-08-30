@@ -41,7 +41,7 @@ func main() {
 	w.RegisterActivityWithOptions(activities.CancelActivity, activity.RegisterOptions{Name: "cancel_activity"})
 	w.RegisterActivityWithOptions(activities.FinalizeCheckout, activity.RegisterOptions{Name: "finalize_checkout"})
 
-	log.Printf("go worker polling task queue %q on %s (namespace: %s, provider: %s)", cfg.TaskQueue, cfg.TemporalAddress, cfg.TemporalNamespace, cfg.LLMProvider)
+	log.Printf("go worker polling task queue %q on %s (namespace: %s, provider: %s)", cfg.TaskQueue, cfg.TemporalClientOpts.HostPort, cfg.TemporalClientOpts.Namespace, cfg.LLMProvider)
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		log.Fatalf("worker stopped: %v", err)
 	}

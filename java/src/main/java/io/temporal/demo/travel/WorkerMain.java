@@ -30,7 +30,7 @@ public final class WorkerMain {
       worker.registerActivitiesImplementations(new AgentActivitiesImpl(config, new Database(config.dbUrl()), temporalClient));
       factory.start();
       System.out.printf("java worker polling task queue '%s' on %s (namespace: %s, provider: %s)%n",
-          config.taskQueue(), config.temporalAddress(), config.temporalNamespace(), config.llmProvider());
+          config.taskQueue(), profile.getAddress(), profile.getNamespace(), config.llmProvider());
     } catch (IOException e) {
       System.out.printf("Failed to load configuration %s%n", e.getMessage());
       System.exit(1);

@@ -29,8 +29,8 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import RPCError, RPCStatusCode
 
 # Load repo-root .env (shared demoer quick-switch), then local overrides.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
+load_dotenv(override=True)
 
 TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
 TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
@@ -51,7 +51,8 @@ def temporal_ui_base() -> str:
 
 
 async def _connect() -> Client:
-   	# TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_* env vars are loaded directly by envconfig if present
+    # TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+    # env vars are loaded directly by envconfig
     config = ClientConfig.load_client_connect_config()
     return await Client.connect(
         **config,

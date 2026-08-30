@@ -58,7 +58,7 @@ async def main() -> None:
             activity_executor=activity_executor,
         )
         print(f"worker polling task queue '{config.TASK_QUEUE}' "
-              f"on {config.TEMPORAL_ADDRESS} (provider: {config.LLM_PROVIDER})")
+              f"on {client.service_client.config.target_host} (provider: {config.LLM_PROVIDER})")
         await worker.run()
 
 
