@@ -14,3 +14,6 @@ cd web && uv run uvicorn gateway:app --port 8000
 
 `config.js` is the local-dev fallback config; in a container the gateway serves a
 dynamic `/config.js` (same-origin, correct Temporal-UI base, provider/model).
+
+Environment Configuration is the same as the SDK folders: the gateway reads the 
+repo-root `.env`, then a `web/.env` for local overrides.

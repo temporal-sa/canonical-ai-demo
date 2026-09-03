@@ -1,7 +1,6 @@
 package travelagent
 
 import (
-	"crypto/tls"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,15 +9,12 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/envconfig"
 )
 
 type Config struct {
+	TemporalClientOpts   client.Options
 	TaskQueue            string
-	TemporalAddress      string
-	TemporalNamespace    string
-	TemporalAPIKey       string
-	TemporalTLSCert      string
-	TemporalTLSKey       string
 	DBURL                string
 	LLMProvider          string
 	AnthropicAPIKey      string
@@ -35,16 +31,14 @@ type Config struct {
 func LoadConfig() Config {
 	// The runbook starts the worker from go/, so ../.env is the shared config.
 	// A local .env is loaded second as a convenient SDK-specific override.
-	_ = godotenv.Load("../.env")
+	_ = godotenv.Overload("../.env")
 	_ = godotenv.Overload(".env")
 
 	return Config{
+		// TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+		// env vars are loaded directly by envconfig
+		TemporalClientOpts:   envconfig.MustLoadDefaultClientOptions(),
 		TaskQueue:            firstEnv("TEMPORAL_TASK_QUEUE", "TASK_QUEUE", "travel-agent"),
-		TemporalAddress:      envOr("TEMPORAL_ADDRESS", "localhost:7233"),
-		TemporalNamespace:    envOr("TEMPORAL_NAMESPACE", "default"),
-		TemporalAPIKey:       os.Getenv("TEMPORAL_API_KEY"),
-		TemporalTLSCert:      os.Getenv("TEMPORAL_TLS_CERT"),
-		TemporalTLSKey:       os.Getenv("TEMPORAL_TLS_KEY"),
 		DBURL:                databaseURL(),
 		LLMProvider:          envOr("LLM_PROVIDER", "anthropic"),
 		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
@@ -60,24 +54,7 @@ func LoadConfig() Config {
 }
 
 func DialTemporal(cfg Config) (client.Client, error) {
-	opts := client.Options{
-		HostPort:  cfg.TemporalAddress,
-		Namespace: cfg.TemporalNamespace,
-	}
-	if cfg.TemporalAPIKey != "" {
-		opts.Credentials = client.NewAPIKeyStaticCredentials(cfg.TemporalAPIKey)
-		opts.ConnectionOptions.TLS = &tls.Config{MinVersion: tls.VersionTLS12}
-	} else if cfg.TemporalTLSCert != "" && cfg.TemporalTLSKey != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.TemporalTLSCert, cfg.TemporalTLSKey)
-		if err != nil {
-			return nil, fmt.Errorf("load Temporal mTLS certificate: %w", err)
-		}
-		opts.ConnectionOptions.TLS = &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		}
-	}
-	return client.Dial(opts)
+	return client.Dial(cfg.TemporalClientOpts)
 }
 
 func firstEnv(names ...string) string {

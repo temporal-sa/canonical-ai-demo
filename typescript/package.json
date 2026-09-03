@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "~0.116.0",
     "@temporalio/activity": "~1.22.0",
     "@temporalio/client": "~1.22.0",
+    "@temporalio/envconfig": "~1.22.0",
     "@temporalio/worker": "~1.22.0",
     "@temporalio/workflow": "~1.22.0",
     "dotenv": "~17.4.2",

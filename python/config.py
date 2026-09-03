@@ -6,21 +6,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load repo-root .env (shared demoer quick-switch), then local overrides.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
+load_dotenv(override=True)
 
 # Task queue — env-overridable so the demo-cloud registry's "crashable
 # workspace" feature can hand each attendee an isolated queue (it injects
 # TEMPORAL_TASK_QUEUE=<base>-<workspace-id> into the worker + app). Falls back to
 # the legacy TASK_QUEUE, then the shared default for local/always-on runs.
 TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel-agent")
-
-# Temporal connection — local dev server by default; Temporal Cloud via env.
-TEMPORAL_ADDRESS = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
-TEMPORAL_NAMESPACE = os.getenv("TEMPORAL_NAMESPACE", "default")
-TEMPORAL_API_KEY = os.getenv("TEMPORAL_API_KEY")
-TEMPORAL_TLS_CERT = os.getenv("TEMPORAL_TLS_CERT")
-TEMPORAL_TLS_KEY = os.getenv("TEMPORAL_TLS_KEY")
 
 # Database — a full DB_URL (local `docker compose`) OR discrete DB_* parts
 # (EKS: the platform injects DB_HOST + a DB_PASSWORD secret, so we compose it —
@@ -82,18 +75,13 @@ TOOL_DELAY_SECONDS = float(os.getenv("TOOL_DELAY_SECONDS", "1.0"))
 async def temporal_client():
     """Connect to Temporal — local dev server, Cloud (API key), or Cloud (mTLS)."""
     from temporalio.client import Client, TLSConfig
+    from temporalio.envconfig import ClientConfig
     from temporalio.contrib.pydantic import pydantic_data_converter
 
-    common = {"namespace": TEMPORAL_NAMESPACE, "data_converter": pydantic_data_converter}
-
-    if TEMPORAL_API_KEY:
-        return await Client.connect(
-            TEMPORAL_ADDRESS, api_key=TEMPORAL_API_KEY, tls=True, **common
-        )
-    if TEMPORAL_TLS_CERT and TEMPORAL_TLS_KEY:
-        tls = TLSConfig(
-            client_cert=Path(TEMPORAL_TLS_CERT).read_bytes(),
-            client_private_key=Path(TEMPORAL_TLS_KEY).read_bytes(),
-        )
-        return await Client.connect(TEMPORAL_ADDRESS, tls=tls, **common)
-    return await Client.connect(TEMPORAL_ADDRESS, **common)
+    # TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+    # env vars are loaded directly by envconfig
+    config = ClientConfig.load_client_connect_config()
+    return await Client.connect(
+        **config,
+        data_converter=pydantic_data_converter,
+    )

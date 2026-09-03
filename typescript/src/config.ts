@@ -5,21 +5,20 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { NativeConnection } from '@temporalio/worker';
 import { Client, Connection } from '@temporalio/client';
+import { loadClientConnectConfig } from '@temporalio/envconfig';
 
 // repo-root .env first (shared demoer quick-switch), then a local override.
-dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env'), override: true });
+dotenv.config({ override: true });
 
 // TEMPORAL_TASK_QUEUE is what the demo-cloud registry's crashable-workspace
 // feature injects (<base>-<workspace-id>); fall back to legacy TASK_QUEUE, then
 // the shared default. Mirrors python/config.py.
 export const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? process.env.TASK_QUEUE ?? 'travel-agent';
-export const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233';
-export const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE ?? 'default';
 
-const TEMPORAL_API_KEY = process.env.TEMPORAL_API_KEY;
-const TEMPORAL_TLS_CERT = process.env.TEMPORAL_TLS_CERT;
-const TEMPORAL_TLS_KEY = process.env.TEMPORAL_TLS_KEY;
+// TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY or TEMPORAL_TLS_CLIENT_*
+// env vars are loaded directly by envconfig
+export const CLIENT_CONFIG = loadClientConnectConfig();
 
 // ── Database — a full DB_URL (local docker compose) OR discrete DB_* parts. ──
 function dbUrl(): string {
@@ -64,41 +63,10 @@ export const TOOL_DELAY_SECONDS = parseFloat(process.env.TOOL_DELAY_SECONDS ?? '
 // The Worker polls over a NativeConnection; the kill-switch bridge (control.ts)
 // needs a client Connection to query its own workflow.
 export async function workerConnection(): Promise<NativeConnection> {
-  if (TEMPORAL_API_KEY) {
-    return NativeConnection.connect({ address: TEMPORAL_ADDRESS, apiKey: TEMPORAL_API_KEY, tls: true });
-  }
-  if (TEMPORAL_TLS_CERT && TEMPORAL_TLS_KEY) {
-    const fs = await import('fs');
-    return NativeConnection.connect({
-      address: TEMPORAL_ADDRESS,
-      tls: {
-        clientCertPair: {
-          crt: fs.readFileSync(TEMPORAL_TLS_CERT),
-          key: fs.readFileSync(TEMPORAL_TLS_KEY),
-        },
-      },
-    });
-  }
-  return NativeConnection.connect({ address: TEMPORAL_ADDRESS });
+  return NativeConnection.connect(CLIENT_CONFIG.connectionOptions);
 }
 
 export async function makeClient(): Promise<Client> {
-  let connection: Connection;
-  if (TEMPORAL_API_KEY) {
-    connection = await Connection.connect({ address: TEMPORAL_ADDRESS, apiKey: TEMPORAL_API_KEY, tls: true });
-  } else if (TEMPORAL_TLS_CERT && TEMPORAL_TLS_KEY) {
-    const fs = await import('fs');
-    connection = await Connection.connect({
-      address: TEMPORAL_ADDRESS,
-      tls: {
-        clientCertPair: {
-          crt: fs.readFileSync(TEMPORAL_TLS_CERT),
-          key: fs.readFileSync(TEMPORAL_TLS_KEY),
-        },
-      },
-    });
-  } else {
-    connection = await Connection.connect({ address: TEMPORAL_ADDRESS });
-  }
-  return new Client({ connection, namespace: TEMPORAL_NAMESPACE });
+  const connection = await Connection.connect(CLIENT_CONFIG.connectionOptions);
+  return new Client({ connection, namespace: CLIENT_CONFIG.namespace });
 }

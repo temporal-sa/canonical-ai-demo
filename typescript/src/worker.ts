@@ -1,4 +1,4 @@
-// Worker entrypoint: polls the task queue, runs the workflow + activities (LLM,
+  // Worker entrypoint: polls the task queue, runs the workflow + activities (LLM,
 // tools, DB, research). Same crash-recovery beat as python/worker.py — kill it
 // mid-conversation and restart; the loop resumes from history.
 //
@@ -16,15 +16,15 @@ async function main(): Promise<void> {
 
   const worker = await Worker.create({
     connection,
-    namespace: config.TEMPORAL_NAMESPACE,
+    namespace: config.CLIENT_CONFIG.namespace,
     taskQueue: config.TASK_QUEUE,
     workflowsPath: require.resolve('./agent'),
     activities,
   });
 
   console.log(
-    `ts worker polling task queue '${config.TASK_QUEUE}' on ${config.TEMPORAL_ADDRESS} ` +
-      `(namespace: ${config.TEMPORAL_NAMESPACE}, provider: ${config.LLM_PROVIDER})`
+    `ts worker polling task queue '${config.TASK_QUEUE}' on ${config.CLIENT_CONFIG.connectionOptions.address} ` +
+      `(namespace: ${config.CLIENT_CONFIG.namespace}, provider: ${config.LLM_PROVIDER})`
   );
   await worker.run();
 }
