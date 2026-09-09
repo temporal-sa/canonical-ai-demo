@@ -364,6 +364,20 @@
       </div>
     </section>
 
+    <section class="controls-section" aria-labelledby="session-controls-label">
+      <p class="control-section-label" id="session-controls-label">Session</p>
+      <div class="control-list">
+        <div class="control-row">
+          <span class="control-copy">
+            <strong>Terminate workflow</strong>
+            <span>End this conversation's workflow so finished sessions stop running and don't crowd the namespace.</span>
+          </span>
+          <button id="control-terminate" type="button" class="control-btn danger">Terminate</button>
+        </div>
+        <div id="terminate-status" class="control-status" role="status"></div>
+      </div>
+    </section>
+
     <div id="controls-message" role="status"></div>
   </div>
 </aside>

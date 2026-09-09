@@ -181,6 +181,19 @@ async def pending_approval(conversation_id: str):
                         "args": pending["args"]}}
 
 
+@app.post("/conversations/{conversation_id}/terminate", status_code=202)
+async def terminate(conversation_id: str):
+    """End this conversation's workflow so idle demo sessions don't pile up in
+    the namespace. Idempotent: an already-closed or unknown workflow is treated
+    as success, since the goal (not running) already holds."""
+    try:
+        await _handle(conversation_id).terminate("Ended from Demo controls")
+    except RPCError as e:
+        if e.status != RPCStatusCode.NOT_FOUND:
+            raise
+    return {}
+
+
 @app.post("/conversations/{conversation_id}/approve", status_code=202)
 async def approve(conversation_id: str, body: Approve):
     handle = _handle(conversation_id)

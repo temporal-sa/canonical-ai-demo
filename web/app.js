@@ -508,6 +508,35 @@ if (crashBtn) {
     }
   };
 }
+
+// ── Terminate: end this conversation's workflow so idle sessions don't pile up ─
+function terminateStatus(text, isError) {
+  const el = $('terminate-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.toggle('error', !!isError);
+}
+
+const terminateBtn = $('control-terminate');
+if (terminateBtn) {
+  terminateBtn.onclick = async () => {
+    if (!conversationId) { terminateStatus('No active session yet — send a message first.'); return; }
+    if (!confirm('Terminate this workflow? The conversation ends and cannot resume.')) return;
+    terminateBtn.disabled = true;
+    terminateStatus('Terminating…');
+    try {
+      const ended = conversationId;
+      await call('POST', `/conversations/${conversationId}/terminate`);
+      conversationId = null;               // next send starts a fresh workflow
+      $('conv-id').replaceChildren();
+      terminateStatus(`Terminated ${ended}. Send a message to start a new session.`);
+    } catch (err) {
+      terminateStatus(err.message, true);
+    } finally {
+      terminateBtn.disabled = false;
+    }
+  };
+}
 setOutage(false);
 setInterval(() => { if ($('controls-panel').classList.contains('open')) refreshOutage(); }, 5000);
 
