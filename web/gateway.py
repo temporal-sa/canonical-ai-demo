@@ -11,9 +11,13 @@ Each endpoint is one Temporal client call. Stateless — workflow ID =
 conversation ID, so any replica can serve any conversation.
 """
 
+import asyncio
+import json
 import os
 import re
 import secrets
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,6 +42,19 @@ TASK_QUEUE = os.getenv("TEMPORAL_TASK_QUEUE") or os.getenv("TASK_QUEUE", "travel
 WORKFLOW_TYPE = os.getenv("WORKFLOW_TYPE", "TravelAgentWorkflow")
 DEFAULT_TRAVELLER_EMAIL = os.getenv("DEFAULT_TRAVELLER_EMAIL", "sa@temporal.io")
 WEB_DIR = os.getenv("WEB_DIR", str(Path(__file__).resolve().parent))
+
+# Deploy context. "local" (default) → the drawer shows the `make` commands that
+# control local infra. "cloud" → the drawer hides them and shows a "Crash
+# workers" button that reaches the registry's crashable-workspace controller.
+DEMO_HOSTING = os.getenv("DEMO_HOSTING", "local").strip().lower()
+# The registry project name (the `demo` key the catalog's crash endpoint keys on)
+# and the catalog origin we proxy the crash request to. Both default safely so a
+# cloud deploy only has to set DEMO_HOSTING=cloud.
+DEMO_NAME = os.getenv("DEMO_NAME", "canonical-ai-demo")
+CATALOG_BASE_URL = os.getenv("CATALOG_BASE_URL", "https://catalog.tmprl-demo.cloud").rstrip("/")
+# The auth cookie the platform sets on *.tmprl-demo.cloud; the catalog reads the
+# signed email claim from it to scope the crash to the caller's own workspace.
+AUTH_SESSION_COOKIE = "temporal_demo_auth"
 
 
 def temporal_ui_base() -> str:
@@ -225,6 +242,66 @@ async def set_llm_status(conversation_id: str, body: LLMStatus):
     return {"down": body.down}
 
 
+# ── crash workers (cloud): proxy the Demo-controls button to the catalog ─────
+# The crashable-workspace controller lives on the OPERATOR's Temporal, not the
+# demo's own namespace — so we don't reach it directly. Instead we forward the
+# caller's signed auth cookie to the catalog's existing crash endpoint, which
+# verifies identity, checks the demo is crashable, and sends the `crash` Update.
+# Server-side proxy → no CORS, no operator creds or JWT signing key in this pod.
+def _post_catalog_crash(cookie: str) -> tuple[int, dict]:
+    req = urllib.request.Request(
+        f"{CATALOG_BASE_URL}/api/crashable-workspace/crash",
+        data=json.dumps({"demo": DEMO_NAME}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Cookie": f"{AUTH_SESSION_COOKIE}={cookie}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        body = e.read() or b"{}"
+        try:
+            return e.code, json.loads(body)
+        except json.JSONDecodeError:
+            return e.code, {"message": body.decode("utf-8", "replace")}
+
+
+@app.post("/demo-controls/crash-worker")
+async def crash_worker(request: Request):
+    if DEMO_HOSTING != "cloud":
+        raise HTTPException(status_code=400,
+                            detail="Worker crash is only available in cloud-hosted mode.")
+    cookie = request.cookies.get(AUTH_SESSION_COOKIE)
+    if not cookie:
+        raise HTTPException(status_code=401,
+                            detail="No auth session — sign in through the demo catalog to crash workers.")
+    try:
+        status, payload = await asyncio.to_thread(_post_catalog_crash, cookie)
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise HTTPException(status_code=503,
+                            detail=f"Could not reach the crash controller: {e}") from e
+    if status >= 400:
+        detail = payload.get("message") or payload.get("error") or "crash request failed"
+        raise HTTPException(status_code=status, detail=detail)
+    # The catalog sends the flat WorkspaceStatus; tolerate the raw update
+    # envelope ({"success": {"payloads": [status]}}) too, just in case.
+    try:
+        payload = payload["success"]["payloads"][0]
+    except (KeyError, IndexError, TypeError):
+        pass
+    # Surface the fields the drawer shows: phase/step (Crashing/Ready) + host.
+    return {
+        "phase": payload.get("phase"),
+        "step": payload.get("step"),
+        "host": payload.get("host"),
+        "appUrl": payload.get("app_url"),
+        "workspaceId": payload.get("workspace_id"),
+    }
+
+
 # ── serve the web UI same-origin (BACKEND_URL="" in the browser) ─────────────
 @app.get("/config.js")
 async def config_js():
@@ -233,6 +310,7 @@ async def config_js():
         f'window.TEMPORAL_UI_BASE = "{temporal_ui_base()}";\n'
         f'window.LLM_PROVIDER = "{LLM_PROVIDER}";\n'
         f'window.LLM_MODEL = "{LLM_MODEL}";\n'
+        f'window.DEMO_HOSTING = "{DEMO_HOSTING}";\n'
     )
     # no-store: this is generated per-deploy and must never be cached by the
     # browser or the CDN (Cloudflare) — a stale copy re-introduces the static

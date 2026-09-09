@@ -477,6 +477,37 @@ $('control-outage').onchange = async (e) => {
 $('as-provider').textContent =
   { anthropic: 'Anthropic API', openai: 'OpenAI API' }[window.LLM_PROVIDER] || 'LLM API';
 $('as-model').textContent = window.LLM_MODEL || 'claude';
+
+// ── runtime components: local shows the `make` commands; cloud swaps in a
+// "Crash workers" button that proxies to the crashable-workspace controller. ──
+if ((window.DEMO_HOSTING || 'local') === 'cloud') {
+  $('controls-local').hidden = true;
+  $('controls-cloud').hidden = false;
+}
+
+function crashStatus(text, isError) {
+  const el = $('crash-worker-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.toggle('error', !!isError);
+}
+
+const crashBtn = $('control-crash-worker');
+if (crashBtn) {
+  crashBtn.onclick = async () => {
+    crashBtn.disabled = true;
+    crashStatus('Crashing worker pods…');
+    try {
+      const r = await call('POST', '/demo-controls/crash-worker');
+      const where = r.host ? ` (${r.host})` : '';
+      crashStatus(`Workers crashing${where} — Kubernetes restarts them and the workflow resumes on the exact next step.`);
+    } catch (err) {
+      crashStatus(err.message, true);
+    } finally {
+      crashBtn.disabled = false;
+    }
+  };
+}
 setOutage(false);
 setInterval(() => { if ($('controls-panel').classList.contains('open')) refreshOutage(); }, 5000);
 
