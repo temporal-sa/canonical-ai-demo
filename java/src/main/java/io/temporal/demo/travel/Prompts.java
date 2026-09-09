@@ -76,7 +76,7 @@ final class Prompts {
 
   static final String WRITE_SYSTEM = "Synthesize the supplied travel research findings into a cohesive 250–400 word Markdown destination guide grounded only in the findings. Return a two-to-three sentence short_summary and a markdown_report with compact headings and a useful table where appropriate.";
 
-  static final Map<String, Object> PLAN_SCHEMA = object(Map.of(
+  static final Map<String, Object> PLAN_SCHEMA = schemaObject(Map.of(
       "searches", Map.of(
           "type", "array",
           "items", schemaObject(Map.of("query", Map.of("type", "string"), "reason", Map.of("type", "string")), "query", "reason"))), "searches");
