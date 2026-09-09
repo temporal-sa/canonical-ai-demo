@@ -305,6 +305,7 @@ class TravelAgentWorkflow:
             result = await workflow.execute_activity(
                 web_search, item,
                 start_to_close_timeout=timedelta(seconds=120),
+                heartbeat_timeout=timedelta(seconds=30),
                 retry_policy=LLM_RETRY,
             )
             self.searches_done += 1

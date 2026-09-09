@@ -124,9 +124,15 @@ async def web_search(item: SearchItem) -> str:
 
     # Server-side tool loop: Claude may pause (pause_turn) if it hits the
     # per-turn tool-use cap — re-send to let it resume, with a hard cap.
+    # Heartbeat between rounds so a dead/stuck worker is detected via the
+    # activity's heartbeat_timeout (~30s) instead of waiting out the full
+    # start_to_close cap. We can only heartbeat between rounds, not inside a
+    # single messages.create call — basic web_search is snappy so one round
+    # stays well under the heartbeat window.
     try:
         async with _client() as client:
             for _ in range(4):
+                activity.heartbeat()
                 resp = await client.messages.create(
                     model=config.ANTHROPIC_MODEL,
                     max_tokens=1024,
