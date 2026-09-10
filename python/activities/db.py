@@ -9,6 +9,8 @@ conversation via account_key (the workflow ID).
 """
 
 import calendar
+import hashlib
+import random
 from datetime import date, timedelta
 
 import psycopg
@@ -101,38 +103,113 @@ def get_destination_info(name: str) -> dict:
         return dest
 
 
+# ── fabricated offers (flights & hotels) ─────────────────────────────────────
+# Flights and hotels are generated on demand from the traveller's request, not
+# seeded — so ANY city/route/date returns results and a demoer can plan any trip.
+# Each offer is deterministic (seeded by its route/city), so a retry returns the
+# same offers and IDs. We upsert each into the flight/hotel table purely so the
+# existing id-based add_to_itinerary → book_trip round-trip resolves unchanged —
+# the DB is just an ephemeral external store here, and nothing outside this file
+# (workflow, tools, prompts) changes. Ids sit in a high band so they never
+# collide with any seed rows.
+
+_AIRLINES = [
+    ("United", "UA"), ("Delta", "DL"), ("American", "AA"), ("Emirates", "EK"),
+    ("Singapore Airlines", "SQ"), ("ANA", "NH"), ("Lufthansa", "LH"),
+    ("British Airways", "BA"), ("Qatar Airways", "QR"), ("Cathay Pacific", "CX"),
+]
+_HOTEL_PREFIXES = ["The Grand", "Park", "Riverside", "Central", "Skyline",
+                   "Old Town", "Harbour", "Garden", "Metropole", "Boutique"]
+_HOTEL_SUFFIXES = ["Hotel", "Suites", "Inn", "Residence", "Palace", "Lodge"]
+_HOTEL_AREAS = ["City Center", "Old Town", "Waterfront", "Downtown",
+                "Historic District", "Riverside", "Arts Quarter"]
+_CABINS = ["Economy", "Economy", "Economy", "Premium Economy", "Business"]
+_CABIN_PREMIUM = {"Economy": 0, "Premium Economy": 220, "Business": 1100}
+
+
+def _rng(*parts) -> random.Random:
+    """Deterministic RNG seeded by a stable string — same request → same offers."""
+    return random.Random("|".join(str(p) for p in parts))
+
+
+def _offer_id(*parts) -> int:
+    """Stable id in a high band (seed rows use small ints, so no collisions)."""
+    h = hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()
+    return 1_000_000 + int(h[:15], 16) % 2_000_000_000
+
+
+def _airport_code(city: str) -> str:
+    letters = "".join(c for c in city.upper() if c.isalpha())
+    return (letters + "XXX")[:3]
+
+
+def _hhmm(mins: int) -> str:
+    mins %= 24 * 60
+    return f"{mins // 60:02d}:{mins % 60:02d}"
+
+
+def _dest_id_for_city(conn, city: str) -> int:
+    """Reuse a seeded destination if the city matches one, else create a minimal
+    row (fabricated hotels need a destination_id FK). Deterministic id."""
+    row = conn.execute(
+        "SELECT destination_id FROM destination WHERE city ILIKE %s ORDER BY destination_id LIMIT 1",
+        (f"%{city}%",),
+    ).fetchone()
+    if row:
+        return row["destination_id"]
+    dest_id = _offer_id("dest", city.lower())
+    conn.execute(
+        """INSERT INTO destination (destination_id, city, country, region, airport_code)
+           VALUES (%s, %s, %s, %s, %s) ON CONFLICT (destination_id) DO NOTHING""",
+        (dest_id, city, "", "", _airport_code(city)),
+    )
+    return dest_id
+
+
 # ── flights ──────────────────────────────────────────────────────────────────
 def search_flights(destination: str, origin: str | None = None,
                    depart_date: str | None = None) -> list[dict]:
-    """Search seeded flights. Destination is required; origin (city or airport
-    code) narrows the results. Cheapest first.
-
-    Dates are intentionally flexible: the route's flights are stamped with the
-    requested depart_date (or a near-future default when none is given), so ANY
-    date the traveller names returns flights — the demo is never boxed into the
-    handful of dates that happen to be seeded."""
-    base = ["(dest_city ILIKE %(dest)s OR dest_code ILIKE %(dest_code)s)"]
-    params: dict = {"dest": f"%{destination}%", "dest_code": destination}
-    if origin:
-        base.append("(origin_city ILIKE %(orig)s OR origin_code ILIKE %(orig_code)s)")
-        params["orig"] = f"%{origin}%"
-        params["orig_code"] = origin
-
-    sql = f"""
-        SELECT flight_id, airline, flight_no, origin_city, origin_code,
-               dest_city, dest_code, depart_time, arrive_time, duration_min,
-               stops, price::float8 AS price, cabin
-        FROM flight
-        WHERE {' AND '.join(base)}
-        ORDER BY price
-        LIMIT 12
-    """
+    """Generate flights for the requested route/date. Always returns options
+    (cheapest first) for any origin/destination — origin defaults to a hub when
+    the traveller hasn't named one; the date is echoed onto every offer."""
+    origin_city = origin or "San Francisco"
+    dest_city = destination
     eff_date = depart_date or _default_flight_date()
+    origin_code, dest_code = _airport_code(origin_city), _airport_code(dest_city)
+    r = _rng("flight", origin_city.lower(), dest_city.lower(), eff_date)
+
+    offers = []
+    for i in range(r.randint(4, 6)):
+        airline, code = r.choice(_AIRLINES)
+        cabin = r.choice(_CABINS)
+        depart_min = r.randint(5 * 60, 21 * 60)
+        duration = r.randint(90, 16 * 60)
+        offers.append({
+            "flight_id": _offer_id("flight", origin_city, dest_city, eff_date, i),
+            "airline": airline, "flight_no": f"{code}{r.randint(100, 9999)}",
+            "origin_city": origin_city, "origin_code": origin_code,
+            "dest_city": dest_city, "dest_code": dest_code,
+            "depart_time": _hhmm(depart_min), "arrive_time": _hhmm(depart_min + duration),
+            "duration_min": duration, "stops": r.choice([0, 0, 0, 1]),
+            "price": float(r.randint(180, 900) + _CABIN_PREMIUM[cabin]), "cabin": cabin,
+            "depart_date": eff_date,
+        })
+    offers.sort(key=lambda o: o["price"])
+
     with _connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-    for r in rows:
-        r["depart_date"] = eff_date  # dates are cosmetic — echo what was asked for
-    return rows
+        for o in offers:
+            conn.execute(
+                """INSERT INTO flight (flight_id, airline, flight_no, origin_city,
+                       origin_code, dest_city, dest_code, depart_date, depart_time,
+                       arrive_time, duration_min, stops, price, cabin)
+                   VALUES (%(flight_id)s, %(airline)s, %(flight_no)s, %(origin_city)s,
+                       %(origin_code)s, %(dest_city)s, %(dest_code)s, %(depart_date)s,
+                       %(depart_time)s, %(arrive_time)s, %(duration_min)s, %(stops)s,
+                       %(price)s, %(cabin)s)
+                   ON CONFLICT (flight_id) DO NOTHING""",
+                o,
+            )
+    return offers
 
 
 # ── events (the "travel for an event" entry point) ────────────────────────────
@@ -164,22 +241,37 @@ def search_events(destination: str, month=None) -> list[dict]:
 
 # ── hotels ───────────────────────────────────────────────────────────────────
 def search_hotels(destination: str, max_price: float | None = None) -> list[dict]:
-    clauses = ["(d.city ILIKE %(dest)s OR d.country ILIKE %(dest)s)"]
-    params: dict = {"dest": f"%{destination}%"}
+    """Generate hotels for the requested city. Always returns options (cheapest
+    first); an optional max_price filters, but never to empty — the cheapest is
+    kept so any city still returns a place to stay."""
+    city = destination
+    r = _rng("hotel", city.lower())
+    offers = []
+    for i in range(r.randint(4, 6)):
+        offers.append({
+            "hotel_id": _offer_id("hotel", city.lower(), i),
+            "name": f"{r.choice(_HOTEL_PREFIXES)} {city} {r.choice(_HOTEL_SUFFIXES)}",
+            "area": r.choice(_HOTEL_AREAS), "stars": r.randint(2, 5),
+            "rating": round(r.uniform(3.5, 4.8), 1),
+            "nightly_price": float(r.randint(6, 60) * 10), "city": city,
+        })
+    offers.sort(key=lambda o: o["nightly_price"])
     if max_price is not None:
-        clauses.append("h.nightly_price <= %(max)s")
-        params["max"] = max_price
-    sql = f"""
-        SELECT h.hotel_id, h.name, h.area, h.stars, h.rating::float8 AS rating,
-               h.nightly_price::float8 AS nightly_price, d.city
-        FROM hotel h
-        JOIN destination d ON d.destination_id = h.destination_id
-        WHERE {' AND '.join(clauses)}
-        ORDER BY h.nightly_price
-        LIMIT 12
-    """
+        within = [o for o in offers if o["nightly_price"] <= max_price]
+        offers = within or offers[:1]  # always leave at least the cheapest
+
     with _connect() as conn:
-        return conn.execute(sql, params).fetchall()
+        dest_id = _dest_id_for_city(conn, city)
+        for o in offers:
+            conn.execute(
+                """INSERT INTO hotel (hotel_id, destination_id, name, area, stars,
+                       rating, nightly_price)
+                   VALUES (%(hotel_id)s, %(destination_id)s, %(name)s, %(area)s,
+                       %(stars)s, %(rating)s, %(nightly_price)s)
+                   ON CONFLICT (hotel_id) DO NOTHING""",
+                {**o, "destination_id": dest_id},
+            )
+    return offers
 
 
 # ── attractions ──────────────────────────────────────────────────────────────
