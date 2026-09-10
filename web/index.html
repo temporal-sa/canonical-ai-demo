@@ -90,7 +90,10 @@
   .controls-backend strong { display: block; margin-top: 1px; color: var(--text); font-size: 13px; font-weight: 620; }
   .controls-section + .controls-section { margin-top: 23px; }
   .control-section-label { margin: 0 3px 9px; color: #6f6b78; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+  [hidden] { display: none !important; }  /* beat the display rules below (e.g. .control-list) so the attr hides */
   .control-list { display: flex; flex-direction: column; gap: 9px; }
+  .control-copy a { color: var(--purple); text-decoration: none; }
+  .control-copy a:hover { text-decoration: underline; }
   .control-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; min-height: 70px; padding: 14px 15px; background: rgba(255, 255, 255, .025); border: 1px solid var(--border); border-radius: 15px; }
   .control-row.toggle { cursor: pointer; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
   .control-row.toggle:hover { background: rgba(255, 255, 255, .045); border-color: var(--border-strong); transform: translateY(-1px); }
@@ -361,6 +364,12 @@
           <button id="control-crash-worker" type="button" class="control-btn danger">Crash workers</button>
         </div>
         <div id="crash-worker-status" class="control-status" role="status"></div>
+        <div class="control-row">
+          <span class="control-copy">
+            <strong>Your own workspace</strong>
+            <span>Provision a private, time-limited copy of this demo you can crash freely — spin one up from its card on the <a id="catalog-link" href="https://catalog.tmprl-demo.cloud" target="_blank" rel="noopener">demo catalog</a>.</span>
+          </span>
+        </div>
       </div>
     </section>
 

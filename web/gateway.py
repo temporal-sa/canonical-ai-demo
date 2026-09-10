@@ -324,6 +324,7 @@ async def config_js():
         f'window.LLM_PROVIDER = "{LLM_PROVIDER}";\n'
         f'window.LLM_MODEL = "{LLM_MODEL}";\n'
         f'window.DEMO_HOSTING = "{DEMO_HOSTING}";\n'
+        f'window.CATALOG_PROVISION_URL = "{CATALOG_BASE_URL}/#{DEMO_NAME}";\n'
     )
     # no-store: this is generated per-deploy and must never be cached by the
     # browser or the CDN (Cloudflare) — a stale copy re-introduces the static

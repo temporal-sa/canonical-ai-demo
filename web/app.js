@@ -480,9 +480,12 @@ $('as-model').textContent = window.LLM_MODEL || 'claude';
 
 // ── runtime components: local shows the `make` commands; cloud swaps in a
 // "Crash workers" button that proxies to the crashable-workspace controller. ──
-if ((window.DEMO_HOSTING || 'local') === 'cloud') {
-  $('controls-local').hidden = true;
-  $('controls-cloud').hidden = false;
+const isCloudHosted = (window.DEMO_HOSTING || 'local') === 'cloud';
+$('controls-local').hidden = isCloudHosted;
+$('controls-cloud').hidden = !isCloudHosted;
+if (isCloudHosted && window.CATALOG_PROVISION_URL) {
+  const link = $('catalog-link');
+  if (link) link.href = window.CATALOG_PROVISION_URL;
 }
 
 function crashStatus(text, isError) {
