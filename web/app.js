@@ -481,6 +481,7 @@ $('as-model').textContent = window.LLM_MODEL || 'claude';
 // ── runtime components: local shows the `make` commands; cloud swaps in a
 // "Crash workers" button that proxies to the crashable-workspace controller. ──
 const isCloudHosted = (window.DEMO_HOSTING || 'local') === 'cloud';
+const isCrashable = window.IS_CRASHABLE === true;
 $('controls-local').hidden = isCloudHosted;
 $('controls-cloud').hidden = !isCloudHosted;
 if (isCloudHosted && window.CATALOG_PROVISION_URL) {
@@ -496,7 +497,13 @@ function crashStatus(text, isError) {
 }
 
 const crashBtn = $('control-crash-worker');
-if (crashBtn) {
+// Only a crashable clone can crash itself (an always-on cloud deploy can't).
+// When it can't, disable the button and point at the catalog card below.
+if (crashBtn && isCloudHosted && !isCrashable) {
+  crashBtn.disabled = true;
+  crashStatus('This is a shared instance — spin up your own ephemeral workspace below to crash workers.');
+}
+if (crashBtn && isCrashable) {
   crashBtn.onclick = async () => {
     crashBtn.disabled = true;
     crashStatus('Crashing worker pods…');

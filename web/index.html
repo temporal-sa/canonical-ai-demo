@@ -346,12 +346,6 @@
             <span>Crash-recovery: <code>make kill-worker</code> mid-turn, then <code>make worker</code> — the loop resumes on the exact next step.</span>
           </span>
         </div>
-        <div class="control-row">
-          <span class="control-copy">
-            <strong>Database</strong>
-            <span>Infra retry: <code>make kill-db</code> mid-turn — the tool activity retries with backoff; <code>make db</code> restores it.</span>
-          </span>
-        </div>
       </div>
 
       <!-- Cloud: no shell access — crash the worker pods via the controller. -->

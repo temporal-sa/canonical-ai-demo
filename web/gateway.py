@@ -56,6 +56,15 @@ CATALOG_BASE_URL = os.getenv("CATALOG_BASE_URL", "https://catalog.tmprl-demo.clo
 # signed email claim from it to scope the crash to the caller's own workspace.
 AUTH_SESSION_COOKIE = "temporal_demo_auth"
 
+# Am I a crashable clone? The registry operator provisions each ephemeral
+# workspace on a workspace-suffixed task queue (`<base>-<workspace_id>`); a local
+# run or an always-on cloud deploy uses the base queue. That suffix is the only
+# signal actually present in the pod that says "this env can crash itself" — so it,
+# not DEMO_HOSTING, gates the Crash button. (DEMO_HOSTING only picks local vs cloud
+# copy; an always-on cloud deploy is DEMO_HOSTING=cloud but NOT crashable.)
+BASE_TASK_QUEUE = os.getenv("BASE_TASK_QUEUE", "travel-agent")
+IS_CRASHABLE = TASK_QUEUE.startswith(f"{BASE_TASK_QUEUE}-")
+
 
 def temporal_ui_base() -> str:
     if explicit := os.getenv("TEMPORAL_UI_BASE"):
@@ -284,9 +293,11 @@ def _post_catalog_crash(cookie: str) -> tuple[int, dict]:
 
 @app.post("/demo-controls/crash-worker")
 async def crash_worker(request: Request):
-    if DEMO_HOSTING != "cloud":
-        raise HTTPException(status_code=400,
-                            detail="Worker crash is only available in cloud-hosted mode.")
+    if not IS_CRASHABLE:
+        raise HTTPException(
+            status_code=400,
+            detail="Not a crashable environment — provision an ephemeral workspace "
+                   "from the demo catalog to crash workers.")
     cookie = request.cookies.get(AUTH_SESSION_COOKIE)
     if not cookie:
         raise HTTPException(status_code=401,
@@ -324,6 +335,7 @@ async def config_js():
         f'window.LLM_PROVIDER = "{LLM_PROVIDER}";\n'
         f'window.LLM_MODEL = "{LLM_MODEL}";\n'
         f'window.DEMO_HOSTING = "{DEMO_HOSTING}";\n'
+        f'window.IS_CRASHABLE = {"true" if IS_CRASHABLE else "false"};\n'
         f'window.CATALOG_PROVISION_URL = "{CATALOG_BASE_URL}/#{DEMO_NAME}";\n'
     )
     # no-store: this is generated per-deploy and must never be cached by the
