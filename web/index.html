@@ -43,8 +43,8 @@
   }
 
   /* ── demo controls: top-right pill + right-side drawer ── */
-  #controls-toggle {
-    position: fixed; top: 20px; right: 24px; z-index: 40;
+  #top-actions { position: fixed; top: 20px; right: 24px; z-index: 40; display: flex; align-items: center; gap: 10px; }
+  #controls-toggle, #new-session-top {
     display: flex; align-items: center; gap: 10px;
     background: rgba(22, 22, 29, .82); color: var(--text-soft); border: 1px solid var(--border);
     border-radius: 999px; padding: 10px 14px; cursor: pointer; font: inherit; font-size: 12px;
@@ -52,8 +52,8 @@
     box-shadow: 0 8px 30px rgba(0, 0, 0, .22);
     transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
   }
-  #controls-toggle:hover { color: #fff; border-color: rgba(167, 139, 250, .42); background: var(--panel-hover); transform: translateY(-1px); }
-  #controls-toggle svg { width: 15px; height: 15px; color: var(--muted); }
+  #controls-toggle:hover, #new-session-top:hover { color: #fff; border-color: rgba(167, 139, 250, .42); background: var(--panel-hover); transform: translateY(-1px); }
+  #controls-toggle svg, #new-session-top svg { width: 15px; height: 15px; color: var(--muted); }
   #controls-toggle .status-dot {
     width: 7px; height: 7px; border-radius: 50%; background: var(--green);
     box-shadow: 0 0 0 4px rgba(95, 211, 154, .1); transition: background .18s ease, box-shadow .18s ease;
@@ -257,7 +257,7 @@
   @media (max-width: 900px) { #itinerary-rail { display: none; } }
 
   @media (max-width: 640px) {
-    #controls-toggle { top: 12px; right: 12px; }
+    #top-actions { top: 12px; right: 12px; }
     #controls-panel { width: 100%; }
     .controls-scroll { padding: 24px 20px 20px; }
     main { padding: 58px 15px 22px; }
@@ -271,14 +271,22 @@
 </head>
 <body>
 
-<button id="controls-toggle" type="button" aria-controls="controls-panel" aria-expanded="false">
-  <span class="status-dot" aria-hidden="true"></span>
-  Demo controls
-  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-    <path d="M3 5h8m3 0h3M3 10h3m3 0h8M3 15h7m3 0h4"/>
-    <circle cx="12.5" cy="5" r="1.5"/><circle cx="7.5" cy="10" r="1.5"/><circle cx="11.5" cy="15" r="1.5"/>
-  </svg>
-</button>
+<div id="top-actions">
+  <button id="new-session-top" type="button" title="End this conversation and start a fresh session">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+      <path d="M10 4.5v11M4.5 10h11"/>
+    </svg>
+    New session
+  </button>
+  <button id="controls-toggle" type="button" aria-controls="controls-panel" aria-expanded="false">
+    <span class="status-dot" aria-hidden="true"></span>
+    Demo controls
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+      <path d="M3 5h8m3 0h3M3 10h3m3 0h8M3 15h7m3 0h4"/>
+      <circle cx="12.5" cy="5" r="1.5"/><circle cx="7.5" cy="10" r="1.5"/><circle cx="11.5" cy="15" r="1.5"/>
+    </svg>
+  </button>
+</div>
 
 <aside id="itinerary-rail">
   <div class="itin-head">
@@ -325,7 +333,7 @@
         <label class="control-row toggle" id="control-row-outage">
           <span class="control-copy">
             <strong id="as-provider">LLM API</strong>
-            <span>Turn off to simulate a provider outage — this conversation's LLM calls retry until it's back.</span>
+            <span>Turn off to simulate a provider outage.</span>
           </span>
           <span class="switch danger">
             <input id="control-outage" type="checkbox" checked>
@@ -343,7 +351,7 @@
         <div class="control-row">
           <span class="control-copy">
             <strong>Temporal worker</strong>
-            <span>Crash-recovery: <code>make kill-worker</code> mid-turn, then <code>make worker</code> — the loop resumes on the exact next step.</span>
+            <span>Crash-recovery: <code>make kill-worker</code> mid-turn, then <code>make worker</code>.</span>
           </span>
         </div>
       </div>
@@ -353,7 +361,7 @@
         <div class="control-row">
           <span class="control-copy">
             <strong>Temporal worker</strong>
-            <span>Crash-recovery: crash the worker pods mid-turn — Kubernetes restarts them and the loop resumes on the exact next step.</span>
+            <span>Crash-recovery: crash the worker pods mid-turn.</span>
           </span>
           <button id="control-crash-worker" type="button" class="control-btn danger">Crash workers</button>
         </div>
@@ -364,20 +372,6 @@
             <span>Provision a private, time-limited copy of this demo you can crash freely — spin one up from its card on the <a id="catalog-link" href="https://catalog.tmprl-demo.cloud" target="_blank" rel="noopener">demo catalog</a>.</span>
           </span>
         </div>
-      </div>
-    </section>
-
-    <section class="controls-section" aria-labelledby="session-controls-label">
-      <p class="control-section-label" id="session-controls-label">Session</p>
-      <div class="control-list">
-        <div class="control-row">
-          <span class="control-copy">
-            <strong>Terminate workflow</strong>
-            <span>End this conversation's workflow so finished sessions stop running and don't crowd the namespace.</span>
-          </span>
-          <button id="control-terminate" type="button" class="control-btn danger">Terminate</button>
-        </div>
-        <div id="terminate-status" class="control-status" role="status"></div>
       </div>
     </section>
 

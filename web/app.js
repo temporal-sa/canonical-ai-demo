@@ -17,6 +17,14 @@ const $ = (id) => document.getElementById(id);
 let conversationId = null;
 let assistantCount = 0; // assistant messages rendered from the server transcript
 
+// Persist the conversation id so a page refresh (or a full pod crash + reload)
+// reattaches to the SAME durable workflow instead of orphaning it and starting
+// a new one. The workflow survives on the server; this is what lets the UI find
+// it again. See boot()/rehydrate() at the bottom.
+const CONV_KEY = 'travelAgent.conversationId';
+const GREETING =
+  "Hi! Where would you like to travel? I can find events, flights, and hotels, do a deep-dive research pass on a destination — and book your trip.";
+
 // ── tiny fetch helper ────────────────────────────────────────────────────────
 async function call(method, path, body) {
   const res = await fetch(API + path, {
@@ -357,10 +365,9 @@ async function pollUntilSettled(baselineAssistant) {
 // ── lazily start the workflow on the first message ──────────────────────────
 // No sign-in step: the traveller identity comes from the auth gate (cloud) or a
 // default (local), resolved server-side. First send creates the conversation.
-async function ensureConversation() {
-  if (conversationId) return;
-  const { conversationId: id } = await call('POST', '/conversations', {});
+function setConversation(id) {
   conversationId = id;
+  try { localStorage.setItem(CONV_KEY, id); } catch { /* private mode / disabled */ }
   // clickable workflow ID → opens this conversation's workflow in the Temporal UI
   const link = document.createElement('a');
   link.href = `${window.TEMPORAL_UI_BASE}/workflows/${encodeURIComponent(id)}`;
@@ -369,6 +376,18 @@ async function ensureConversation() {
   link.innerHTML = '<span class="label">workflowId:&nbsp;</span>';
   link.append(id);
   $('conv-id').replaceChildren(link);
+}
+
+function clearConversation() {
+  conversationId = null;
+  try { localStorage.removeItem(CONV_KEY); } catch { /* ignore */ }
+  $('conv-id').replaceChildren();
+}
+
+async function ensureConversation() {
+  if (conversationId) return;
+  const { conversationId: id } = await call('POST', '/conversations', {});
+  setConversation(id);
 }
 
 // ── send a message (blocks until the turn settles — see contract) ───────────
@@ -519,31 +538,30 @@ if (crashBtn && isCrashable) {
   };
 }
 
-// ── Terminate: end this conversation's workflow so idle sessions don't pile up ─
-function terminateStatus(text, isError) {
-  const el = $('terminate-status');
-  if (!el) return;
-  el.textContent = text || '';
-  el.classList.toggle('error', !!isError);
+// ── New session: a refresh reattaches to the running workflow; this is the
+// explicit "start clean" — end the current workflow and reset the UI to a fresh
+// conversation. Sits next to the Demo-controls pill so it isn't tucked away. ──
+function resetToFresh() {
+  $('chat').querySelectorAll('.msg, .approval-card').forEach((el) => el.remove());
+  assistantCount = 0;
+  freshStart();                            // empty itinerary + greeting + focus
 }
 
-const terminateBtn = $('control-terminate');
-if (terminateBtn) {
-  terminateBtn.onclick = async () => {
-    if (!conversationId) { terminateStatus('No active session yet — send a message first.'); return; }
-    if (!confirm('Terminate this workflow? The conversation ends and cannot resume.')) return;
-    terminateBtn.disabled = true;
-    terminateStatus('Terminating…');
+const newSessionBtn = $('new-session-top');
+if (newSessionBtn) {
+  newSessionBtn.onclick = async () => {
+    if (!confirm('Start a new session? This ends the current workflow.')) return;
+    newSessionBtn.disabled = true;
     try {
-      const ended = conversationId;
-      await call('POST', `/conversations/${conversationId}/terminate`);
-      conversationId = null;               // next send starts a fresh workflow
-      $('conv-id').replaceChildren();
-      terminateStatus(`Terminated ${ended}. Send a message to start a new session.`);
+      // Best-effort cleanup: end the previous workflow before starting fresh.
+      if (conversationId) await call('POST', `/conversations/${conversationId}/terminate`).catch(() => {});
+      clearConversation();                 // forget the id → next send starts a fresh workflow
+      resetToFresh();
+      closeControls();                     // in case the drawer was open
     } catch (err) {
-      terminateStatus(err.message, true);
+      showError(err.message);
     } finally {
-      terminateBtn.disabled = false;
+      newSessionBtn.disabled = false;
     }
   };
 }
@@ -553,9 +571,59 @@ setInterval(() => { if ($('controls-panel').classList.contains('open')) refreshO
 // ── itinerary rail (left) — the Book button books the trip ───────────────────
 $('itin-book').onclick = () => runTurn('I’d like to book this trip.');
 
-// ── on load ──────────────────────────────────────────────────────────────────
-renderItinerary([], 0);  // show the (empty) itinerary rail right away — no conversation yet
-addMsg('assistant',
-  "Hi! Where would you like to travel? I can find events, flights, and hotels, do a deep-dive research pass on a destination — and book your trip.",
-  { counted: false });  // client-side greeting; not part of the server transcript
-$('input').focus();
+// ── on load: reattach to a surviving workflow, else start fresh ──────────────
+function freshStart() {
+  renderItinerary([], 0);                       // empty itinerary rail — no conversation yet
+  addMsg('assistant', GREETING, { counted: false });  // client greeting; not in the transcript
+  $('input').focus();
+}
+
+// Try to reattach to a stored conversation. Returns true only if it's a live
+// workflow whose durable state we replayed; false (and forgets the id) if it's
+// gone. Transient errors keep the id so a later reload can retry.
+async function rehydrate(id) {
+  let res;
+  try {
+    res = await fetch(API + `/conversations/${id}/transcript`);
+  } catch {
+    return false;                               // network blip — keep the id, start fresh visually
+  }
+  if (res.status === 404) { clearConversation(); return false; }  // workflow gone → forget it
+  if (!res.ok) return false;                    // transient server error — keep the id
+  const { messages } = await res.json();
+
+  setConversation(id);                          // re-adopt the id (and re-render the workflow link)
+  renderTranscript(messages);                   // clears + replays the durable transcript
+  if (!messages.length) addMsg('assistant', GREETING, { counted: false });
+
+  // Restore the rest of the durable view (best-effort; a missing piece just no-ops).
+  const [itin, pend, llm] = await Promise.all([
+    call('GET', `/conversations/${id}/itinerary`).catch(() => null),
+    call('GET', `/conversations/${id}/pending-approval`).catch(() => null),
+    call('GET', `/conversations/${id}/llm-status`).catch(() => null),
+  ]);
+  renderItinerary(itin ? itin.items : [], itin ? itin.total : 0);
+  if (llm) setOutage(llm.down);
+
+  if (pend && pend.pending) {
+    showApprovalCard(pend.pending);            // paused for approval — the card IS the state
+  } else if (messages.length && messages[messages.length - 1].role === 'user') {
+    // A turn was still running when we reattached: a turn only ends by appending
+    // an assistant reply, so a trailing user message means the workflow — which
+    // never stopped — is mid-turn. Resume the wait so the answer lands here.
+    setBusy(true, 'the agent is still working…');
+    pollUntilSettled(messages.filter((m) => m.role === 'assistant').length)
+      .catch(() => setBusy(false));
+  } else {
+    $('input').focus();
+  }
+  return true;
+}
+
+async function boot() {
+  let stored = null;
+  try { stored = localStorage.getItem(CONV_KEY); } catch { /* ignore */ }
+  if (stored && await rehydrate(stored)) return;  // reattached to a live workflow
+  freshStart();
+}
+boot();
