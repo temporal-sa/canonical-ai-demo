@@ -45,11 +45,11 @@ public class TravelAgentWorkflowImpl implements TravelAgentWorkflow {
       .setInitialInterval(Duration.ofSeconds(1)).setBackoffCoefficient(2)
       .setMaximumInterval(Duration.ofSeconds(10)).setDoNotRetry("BookingDeclined").build();
 
-  private final AgentActivities llm = activities(60, LLM_RETRY);
-  private final AgentActivities planner = activities(90, LLM_RETRY);
-  private final AgentActivities searcher = activities(120, LLM_RETRY);
-  private final AgentActivities writer = activities(180, LLM_RETRY);
-  private final AgentActivities tools = activities(30, TOOL_RETRY);
+  private final AgentActivities llm = activities(30, LLM_RETRY);
+  private final AgentActivities planner = activities(30, LLM_RETRY);
+  private final AgentActivities searcher = searchActivities(120, 30, LLM_RETRY);
+  private final AgentActivities writer = activities(30, LLM_RETRY);
+  private final AgentActivities tools = activities(15, TOOL_RETRY);
 
   private final List<ChatMessage> messages = new ArrayList<>();
   private String accountKey;
@@ -236,6 +236,13 @@ public class TravelAgentWorkflowImpl implements TravelAgentWorkflow {
   private static AgentActivities activities(int seconds, RetryOptions retry) {
     return Workflow.newActivityStub(AgentActivities.class, ActivityOptions.newBuilder()
         .setStartToCloseTimeout(Duration.ofSeconds(seconds)).setRetryOptions(retry).build());
+  }
+
+  private static AgentActivities searchActivities(int startToCloseSeconds, int heartbeatSeconds, RetryOptions retry) {
+    return Workflow.newActivityStub(AgentActivities.class, ActivityOptions.newBuilder()
+        .setStartToCloseTimeout(Duration.ofSeconds(startToCloseSeconds))
+        .setHeartbeatTimeout(Duration.ofSeconds(heartbeatSeconds))
+        .setRetryOptions(retry).build());
   }
 
   static CheckoutRequest checkoutRequestForAttempt(

@@ -166,7 +166,7 @@ func dispatchTool(ctx workflow.Context, s *agentState, call ToolCall) toolOutcom
 
 func runTool(ctx workflow.Context, accountKey string, call ToolCall) (string, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
+		StartToCloseTimeout: 15 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2, MaximumInterval: 10 * time.Second, NonRetryableErrorTypes: []string{"BookingDeclined"}},
 		Summary:             call.Name,
 	})
@@ -179,7 +179,7 @@ func research(ctx workflow.Context, s *agentState, query string) (toolOutcome, e
 	s.plan, s.searchesTotal, s.searchesDone = []SearchItem{}, 0, 0
 	s.phase = "planning"
 	var plan SearchPlan
-	if err := workflow.ExecuteActivity(researchContext(ctx, 90*time.Second), "plan_searches", query).Get(ctx, &plan); err != nil {
+	if err := workflow.ExecuteActivity(researchContext(ctx, 30*time.Second), "plan_searches", query).Get(ctx, &plan); err != nil {
 		return toolOutcome{}, err
 	}
 	s.plan, s.searchesTotal, s.phase = plan.Searches, len(plan.Searches), "searching"
@@ -193,7 +193,7 @@ func research(ctx workflow.Context, s *agentState, query string) (toolOutcome, e
 		i, item := i, item
 		workflow.Go(ctx, func(ctx workflow.Context) {
 			var text string
-			err := workflow.ExecuteActivity(researchContext(ctx, 120*time.Second), "web_search", item).Get(ctx, &text)
+			err := workflow.ExecuteActivity(webSearchContext(ctx), "web_search", item).Get(ctx, &text)
 			results.Send(ctx, searchResult{Index: i, Text: text, Err: err})
 		})
 	}
@@ -209,7 +209,7 @@ func research(ctx workflow.Context, s *agentState, query string) (toolOutcome, e
 	}
 	s.phase = "writing"
 	var report ReportData
-	if err := workflow.ExecuteActivity(researchContext(ctx, 180*time.Second), "write_report", WriteRequest{Brief: query, Findings: findings}).Get(ctx, &report); err != nil {
+	if err := workflow.ExecuteActivity(researchContext(ctx, 30*time.Second), "write_report", WriteRequest{Brief: query, Findings: findings}).Get(ctx, &report); err != nil {
 		return toolOutcome{}, err
 	}
 	s.phase = "idle"
@@ -335,7 +335,7 @@ func createInvoice(ctx workflow.Context, s *agentState, call ToolCall) (toolOutc
 // CheckoutWorkflow makes the booking order and reverse compensation explicit.
 func CheckoutWorkflow(ctx workflow.Context, req CheckoutRequest) (CheckoutResult, error) {
 	options := workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
+		StartToCloseTimeout: 15 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2, MaximumInterval: 5 * time.Second, MaximumAttempts: 3, NonRetryableErrorTypes: []string{"HotelBookingFailed", "BookingDeclined"}},
 	}
 	ctx = workflow.WithActivityOptions(ctx, options)
@@ -385,10 +385,13 @@ func compensateCheckout(ctx workflow.Context, _ CheckoutRequest, reservations []
 }
 
 func llmContext(ctx workflow.Context) workflow.Context {
-	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 60 * time.Second, RetryPolicy: llmRetry()})
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second, RetryPolicy: llmRetry()})
 }
 func researchContext(ctx workflow.Context, timeout time.Duration) workflow.Context {
 	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: timeout, RetryPolicy: llmRetry()})
+}
+func webSearchContext(ctx workflow.Context) workflow.Context {
+	return workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 120 * time.Second, HeartbeatTimeout: 30 * time.Second, RetryPolicy: llmRetry()})
 }
 func llmRetry() *temporal.RetryPolicy {
 	return &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2, MaximumInterval: 10 * time.Second, NonRetryableErrorTypes: []string{"LLMFatalError"}}

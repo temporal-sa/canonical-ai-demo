@@ -17,7 +17,7 @@ import java.util.List;
 
 public class CheckoutWorkflowImpl implements CheckoutWorkflow {
   private final AgentActivities activities = Workflow.newActivityStub(AgentActivities.class,
-      ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(30))
+      ActivityOptions.newBuilder().setStartToCloseTimeout(Duration.ofSeconds(15))
           .setRetryOptions(RetryOptions.newBuilder().setInitialInterval(Duration.ofSeconds(1))
               .setBackoffCoefficient(2).setMaximumInterval(Duration.ofSeconds(5)).setMaximumAttempts(3)
               .setDoNotRetry("HotelBookingFailed", "BookingDeclined").build()).build());

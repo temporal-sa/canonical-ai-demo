@@ -67,10 +67,10 @@ const TOOL_RETRY: RetryPolicy = {
 };
 
 // One proxy per activity — each carries its own timeout + retry policy.
-const { callLlm } = proxyActivities<typeof activities>({ startToCloseTimeout: '60 seconds', retry: LLM_RETRY });
-const { planSearches } = proxyActivities<typeof activities>({ startToCloseTimeout: '90 seconds', retry: LLM_RETRY });
-const { webSearch } = proxyActivities<typeof activities>({ startToCloseTimeout: '120 seconds', retry: LLM_RETRY });
-const { writeReport } = proxyActivities<typeof activities>({ startToCloseTimeout: '180 seconds', retry: LLM_RETRY });
+const { callLlm } = proxyActivities<typeof activities>({ startToCloseTimeout: '30 seconds', retry: LLM_RETRY });
+const { planSearches } = proxyActivities<typeof activities>({ startToCloseTimeout: '30 seconds', retry: LLM_RETRY });
+const { webSearch } = proxyActivities<typeof activities>({ startToCloseTimeout: '120 seconds', heartbeatTimeout: '30 seconds', retry: LLM_RETRY });
+const { writeReport } = proxyActivities<typeof activities>({ startToCloseTimeout: '30 seconds', retry: LLM_RETRY });
 // execute_tool carries a per-call `summary` (the tool name), so it's built via
 // runTool() below rather than a single fixed proxy — see the research pipeline
 // activities, which are deliberately left unsummarized.
@@ -182,7 +182,7 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
   // on the Temporal timeline. Building the proxy per call is cheap.
   function runTool(call: ToolCall) {
     const { executeTool } = proxyActivities<typeof activities>({
-      startToCloseTimeout: '30 seconds',
+      startToCloseTimeout: '15 seconds',
       retry: TOOL_RETRY,
       summary: call.name,
     });

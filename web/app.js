@@ -34,7 +34,9 @@ async function call(method, path, body) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `${res.status} ${res.statusText}`);
+    const e = new Error(err.error || `${res.status} ${res.statusText}`);
+    e.status = res.status;                  // let callers tell transient 5xx from a real 4xx
+    throw e;
   }
   return res.status === 204 ? {} : res.json();
 }
@@ -336,12 +338,18 @@ async function decide(card, approved) {
 // After an approval signal the turn resumes server-side; poll until a new
 // assistant message lands (or another approval is requested).
 async function pollUntilSettled(baselineAssistant) {
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 180; i++) {              // ~3 min — survive a full pod restart
     await new Promise((r) => setTimeout(r, 1000));
-    const [{ messages }, { pending }] = await Promise.all([
-      call('GET', `/conversations/${conversationId}/transcript`),
-      call('GET', `/conversations/${conversationId}/pending-approval`),
-    ]);
+    let messages, pending;
+    try {
+      const [t, p] = await Promise.all([
+        call('GET', `/conversations/${conversationId}/transcript`),
+        call('GET', `/conversations/${conversationId}/pending-approval`),
+      ]);
+      messages = t.messages; pending = p.pending;
+    } catch {
+      continue;                               // env still bouncing — keep the spinner, retry
+    }
     if (pending) {
       renderTranscript(messages);
       setBusy(false);
@@ -359,7 +367,35 @@ async function pollUntilSettled(baselineAssistant) {
     }
   }
   setBusy(false);
-  showError('Timed out waiting for the agent — check the worker.');
+  showError('The environment is taking a while to come back — refresh to pick up where it left off.');
+}
+
+// Resilient recovery: crashing the environment takes the worker AND the app pod
+// down, so a live send fails (502 / connection error). The message is a durable
+// Update, so the turn still completes when the pods return — poll until it settles
+// (a turn ends by appending an assistant reply, so we're done when the last entry
+// isn't the user's message), tolerating failures while it's down. Spinner stays up;
+// no refresh needed.
+async function waitForReply() {
+  for (let i = 0; i < 180; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    let messages, pending;
+    try {
+      const [t, p] = await Promise.all([
+        call('GET', `/conversations/${conversationId}/transcript`),
+        call('GET', `/conversations/${conversationId}/pending-approval`),
+      ]);
+      messages = t.messages; pending = p.pending;
+    } catch {
+      continue;                               // still bouncing — keep the spinner, retry
+    }
+    if (pending) { renderTranscript(messages); setBusy(false); showApprovalCard(pending); refreshItinerary(); return; }
+    if (messages.length && messages[messages.length - 1].role === 'assistant') {
+      renderTranscript(messages); setBusy(false); refreshItinerary(); return;
+    }
+  }
+  setBusy(false);
+  showError('The environment is taking a while to come back — refresh to pick up where it left off.');
 }
 
 // ── lazily start the workflow on the first message ──────────────────────────
@@ -397,7 +433,21 @@ async function runTurn(text) {
   try {
     await ensureConversation();
     startStatusPolling();  // narrate research phases while the update is in flight
-    const r = await call('POST', `/conversations/${conversationId}/messages`, { text });
+    let r;
+    try {
+      r = await call('POST', `/conversations/${conversationId}/messages`, { text });
+    } catch (err) {
+      stopStatusPolling();
+      // Transient (no status = connection dropped, or 5xx = pods bouncing): the
+      // message is durable, so keep the spinner and wait for the turn to finish
+      // when the environment comes back — instead of erroring and forcing a refresh.
+      if (!err.status || err.status >= 500) {
+        setBusy(true, 'Reconnecting…');
+        await waitForReply();
+        return;
+      }
+      throw err;  // a real 4xx (e.g. booking declined) → surface it below
+    }
     stopStatusPolling();
     setBusy(false);
     if (r.reply) addMsg('assistant', r.reply);  // research guides arrive here too
@@ -582,15 +632,24 @@ function freshStart() {
 // workflow whose durable state we replayed; false (and forgets the id) if it's
 // gone. Transient errors keep the id so a later reload can retry.
 async function rehydrate(id) {
+  // Only reattach to a workflow that's still RUNNING. Crashable subdomains are
+  // deterministic and reused across workspace incarnations, so a stored id can
+  // point at a workflow a previous incarnation terminated — its transcript still
+  // resolves within retention, but the next turn would 404. Check status first.
   let res;
   try {
-    res = await fetch(API + `/conversations/${id}/transcript`);
+    res = await fetch(API + `/conversations/${id}/status`);
   } catch {
-    return false;                               // network blip — keep the id, start fresh visually
+    return false;                               // network blip — keep the id, retry next load
   }
-  if (res.status === 404) { clearConversation(); return false; }  // workflow gone → forget it
+  if (res.status === 404) { clearConversation(); return false; }  // never existed → forget it
   if (!res.ok) return false;                    // transient server error — keep the id
-  const { messages } = await res.json();
+  const { running } = await res.json();
+  if (!running) { clearConversation(); return false; }  // closed → don't reattach; start clean
+
+  const tr = await fetch(API + `/conversations/${id}/transcript`);
+  if (!tr.ok) { if (tr.status === 404) clearConversation(); return false; }
+  const { messages } = await tr.json();
 
   setConversation(id);                          // re-adopt the id (and re-render the workflow link)
   renderTranscript(messages);                   // clears + replays the durable transcript

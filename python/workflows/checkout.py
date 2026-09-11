@@ -68,7 +68,7 @@ class CheckoutWorkflow:
                             item=item,
                             simulate_hotel_failure=request.simulate_hotel_failure,
                         ),
-                        start_to_close_timeout=timedelta(seconds=30),
+                        start_to_close_timeout=timedelta(seconds=15),  # DB write; fast
                         retry_policy=CHECKOUT_RETRY,
                         summary=f"Book {kind}: {item.title}",
                     )
@@ -77,7 +77,7 @@ class CheckoutWorkflow:
             booking = await workflow.execute_activity(
                 finalize_checkout,
                 request,
-                start_to_close_timeout=timedelta(seconds=30),
+                start_to_close_timeout=timedelta(seconds=15),  # DB write; fast
                 retry_policy=CHECKOUT_RETRY,
                 summary="Commit completed trip",
             )
@@ -104,7 +104,7 @@ class CheckoutWorkflow:
                 compensation = await workflow.execute_activity(
                     cancel_activity_for_kind,
                     reservation,
-                    start_to_close_timeout=timedelta(seconds=30),
+                    start_to_close_timeout=timedelta(seconds=15),  # DB write; fast
                     retry_policy=CHECKOUT_RETRY,
                     summary=f"Cancel {reservation.kind}: {reservation.title}",
                 )

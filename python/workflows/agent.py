@@ -177,7 +177,9 @@ class TravelAgentWorkflow:
             return await workflow.execute_activity(
                 call_llm,
                 LLMRequest(messages=self.messages),
-                start_to_close_timeout=timedelta(seconds=60),
+                # Short cap: a worker crash mid-call is retried in ~30s instead of
+                # ~60s. These generations are short, so a healthy call never nears it.
+                start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=LLM_RETRY,
             )
         except ActivityError:
@@ -204,7 +206,9 @@ class TravelAgentWorkflow:
         result = await workflow.execute_activity(
             execute_tool,
             ToolRequest(call=call, account_key=self.account_key),
-            start_to_close_timeout=timedelta(seconds=30),
+            # execute_tool is just DB work + the ~1s demo pacing delay, so a tight
+            # cap makes a worker crash mid-tool retry in ~15s.
+            start_to_close_timeout=timedelta(seconds=15),
             retry_policy=TOOL_RETRY,
             summary=call.name,
         )
@@ -290,7 +294,9 @@ class TravelAgentWorkflow:
         self.phase = "planning"
         plan: SearchPlan = await workflow.execute_activity(
             plan_searches, query,
-            start_to_close_timeout=timedelta(seconds=90),
+            # Short cap so a worker crash mid-plan is retried in ~30s; the plan is
+            # a small structured call, well under this.
+            start_to_close_timeout=timedelta(seconds=30),
             retry_policy=LLM_RETRY,
         )
         self.plan = plan.searches
@@ -316,7 +322,10 @@ class TravelAgentWorkflow:
         self.phase = "writing"
         report: ReportData = await workflow.execute_activity(
             write_report, WriteRequest(brief=query, findings=list(findings)),
-            start_to_close_timeout=timedelta(seconds=180),
+            # Short cap so a worker crash mid-write is retried in ~30s. This is the
+            # longest LLM call (a full report) — if a healthy write ever nears 30s,
+            # trim write_report's max_tokens rather than raising this.
+            start_to_close_timeout=timedelta(seconds=30),
             retry_policy=LLM_RETRY,
         )
         self.phase = "idle"
@@ -327,7 +336,7 @@ class TravelAgentWorkflow:
     async def _h_add_to_itinerary(self, call: ToolCall) -> ToolOutcome:
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=call, account_key=self.account_key),
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=timedelta(seconds=15),  # DB work + ~1s pacing
             retry_policy=TOOL_RETRY, summary=call.name,
         )
         rows = json.loads(result)
@@ -436,7 +445,7 @@ class TravelAgentWorkflow:
                                 args={"amount": amount, "flight_details": flight_details})
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=invoice_call, account_key=self.account_key),
-            start_to_close_timeout=timedelta(seconds=30),
+            start_to_close_timeout=timedelta(seconds=15),  # DB work + ~1s pacing
             retry_policy=TOOL_RETRY, summary=invoice_call.name,
         )
         return ToolOutcome(result=result)

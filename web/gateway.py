@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from temporalio.client import Client, TLSConfig, WorkflowUpdateFailedError
+from temporalio.client import Client, TLSConfig, WorkflowExecutionStatus, WorkflowUpdateFailedError
 from temporalio.envconfig import ClientConfig
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import RPCError, RPCStatusCode
@@ -166,6 +166,21 @@ async def send_message(conversation_id: str, body: SendMessage):
     except RPCError as e:
         _not_found(e)
     return {"status": result["status"], "reply": result["reply"]}
+
+
+@app.get("/conversations/{conversation_id}/status")
+async def status(conversation_id: str):
+    """Is this workflow still running? Rehydration checks this before reattaching:
+    a closed (terminated/completed) workflow can still be *queried* within
+    retention, so its transcript looks alive — but it can't accept new input, so
+    reattaching to it would 404 on the next turn. describe() is a client call, so
+    it works for closed workflows and needs no worker."""
+    try:
+        desc = await _handle(conversation_id).describe()
+    except RPCError as e:
+        _not_found(e)
+    return {"running": desc.status == WorkflowExecutionStatus.RUNNING,
+            "status": desc.status.name if desc.status else None}
 
 
 @app.get("/conversations/{conversation_id}/transcript")

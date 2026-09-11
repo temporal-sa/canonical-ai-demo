@@ -28,7 +28,7 @@ const CHECKOUT_RETRY: RetryPolicy = {
 };
 
 const checkoutActivities = proxyActivities<typeof activities>({
-  startToCloseTimeout: '30 seconds',
+  startToCloseTimeout: '15 seconds',
   retry: CHECKOUT_RETRY,
 });
 
