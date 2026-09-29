@@ -147,7 +147,15 @@
   .msg.assistant table:last-child { margin-bottom: 0; }
   .msg.assistant th, .msg.assistant td { border: 1px solid var(--border); padding: 5px 12px; text-align: left; }
   .msg.assistant th { color: #eceff4; font-weight: 600; background: rgba(255, 255, 255, .03); }
-  .msg.typing { background: transparent; border: 0; box-shadow: none; color: var(--muted); font-style: italic; padding: 4px 8px; }
+  .msg.typing { background: transparent; border: 0; box-shadow: none; color: var(--muted); font-style: italic; padding: 4px 8px; display: flex; align-items: center; gap: 10px; }
+  .typing-dots { display: inline-flex; gap: 4px; flex-shrink: 0; }
+  .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--purple-bright); opacity: .3; animation: typing-bounce 1.25s ease-in-out infinite; }
+  .typing-dots span:nth-child(2) { animation-delay: .16s; }
+  .typing-dots span:nth-child(3) { animation-delay: .32s; }
+  @keyframes typing-bounce { 0%, 75%, 100% { transform: translateY(0); opacity: .3; } 35% { transform: translateY(-4px); opacity: .95; } }
+  .typing-label { transition: opacity .3s ease; }
+  .typing-label.fading { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .typing-dots span { animation: none; opacity: .7; } .typing-label { transition: none; } }
 
   .approval-card {
     align-self: flex-start; max-width: 80%;
