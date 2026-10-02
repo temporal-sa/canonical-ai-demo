@@ -279,15 +279,18 @@ async def set_llm_status(conversation_id: str, body: LLMStatus):
     return {"down": body.down}
 
 
-# ── crash workers (cloud): proxy the Demo-controls button to the catalog ─────
+# ── worker controls (cloud): proxy the Demo-controls buttons to the catalog ──
 # The crashable-workspace controller lives on the OPERATOR's Temporal, not the
 # demo's own namespace — so we don't reach it directly. Instead we forward the
-# caller's signed auth cookie to the catalog's existing crash endpoint, which
-# verifies identity, checks the demo is crashable, and sends the `crash` Update.
+# caller's signed auth cookie to the catalog's controller endpoints, which verify
+# identity, check the demo is crashable, and drive the pods. Two actions:
+#   crash       — hard-kill the worker pods; the controller auto-restarts them.
+#   scale-down  — scale the worker deployment to 0; stays down until a manual
+#                 restore in the registry (no auto-recovery).
 # Server-side proxy → no CORS, no operator creds or JWT signing key in this pod.
-def _post_catalog_crash(cookie: str) -> tuple[int, dict]:
+def _post_catalog(action: str, cookie: str) -> tuple[int, dict]:
     req = urllib.request.Request(
-        f"{CATALOG_BASE_URL}/api/crashable-workspace/crash",
+        f"{CATALOG_BASE_URL}/api/crashable-workspace/{action}",
         data=json.dumps({"demo": DEMO_NAME}).encode("utf-8"),
         method="POST",
         headers={
@@ -306,24 +309,28 @@ def _post_catalog_crash(cookie: str) -> tuple[int, dict]:
             return e.code, {"message": body.decode("utf-8", "replace")}
 
 
-@app.post("/demo-controls/crash-worker")
-async def crash_worker(request: Request):
+def _require_crashable_cookie(request: Request, verb: str) -> str:
+    """Both worker controls need a crashable env and a signed auth cookie."""
     if not IS_CRASHABLE:
         raise HTTPException(
             status_code=400,
-            detail="Not a crashable environment — provision an ephemeral workspace "
-                   "from the demo catalog to crash workers.")
+            detail=f"Not a crashable environment — provision an ephemeral workspace "
+                   f"from the demo catalog to {verb} workers.")
     cookie = request.cookies.get(AUTH_SESSION_COOKIE)
     if not cookie:
         raise HTTPException(status_code=401,
-                            detail="No auth session — sign in through the demo catalog to crash workers.")
+                            detail=f"No auth session — sign in through the demo catalog to {verb} workers.")
+    return cookie
+
+
+async def _drive_workers(action: str, cookie: str, what: str) -> dict:
     try:
-        status, payload = await asyncio.to_thread(_post_catalog_crash, cookie)
+        status, payload = await asyncio.to_thread(_post_catalog, action, cookie)
     except (urllib.error.URLError, TimeoutError) as e:
         raise HTTPException(status_code=503,
-                            detail=f"Could not reach the crash controller: {e}") from e
+                            detail=f"Could not reach the worker controller: {e}") from e
     if status >= 400:
-        detail = payload.get("message") or payload.get("error") or "crash request failed"
+        detail = payload.get("message") or payload.get("error") or f"{what} request failed"
         raise HTTPException(status_code=status, detail=detail)
     # The catalog sends the flat WorkspaceStatus; tolerate the raw update
     # envelope ({"success": {"payloads": [status]}}) too, just in case.
@@ -331,7 +338,7 @@ async def crash_worker(request: Request):
         payload = payload["success"]["payloads"][0]
     except (KeyError, IndexError, TypeError):
         pass
-    # Surface the fields the drawer shows: phase/step (Crashing/Ready) + host.
+    # Surface the fields the drawer shows: phase/step + host.
     return {
         "phase": payload.get("phase"),
         "step": payload.get("step"),
@@ -339,6 +346,18 @@ async def crash_worker(request: Request):
         "appUrl": payload.get("app_url"),
         "workspaceId": payload.get("workspace_id"),
     }
+
+
+@app.post("/demo-controls/crash-worker")
+async def crash_worker(request: Request):
+    cookie = _require_crashable_cookie(request, "crash")
+    return await _drive_workers("crash", cookie, "crash")
+
+
+@app.post("/demo-controls/scale-workers")
+async def scale_workers(request: Request):
+    cookie = _require_crashable_cookie(request, "scale down")
+    return await _drive_workers("scale-down", cookie, "scale-down")
 
 
 # ── serve the web UI same-origin (BACKEND_URL="" in the browser) ─────────────

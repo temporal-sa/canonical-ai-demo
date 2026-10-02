@@ -17,11 +17,22 @@ const $ = (id) => document.getElementById(id);
 let conversationId = null;
 let assistantCount = 0; // assistant messages rendered from the server transcript
 
-// Persist the conversation id so a page refresh (or a full pod crash + reload)
-// reattaches to the SAME durable workflow instead of orphaning it and starting
-// a new one. The workflow survives on the server; this is what lets the UI find
-// it again. See boot()/rehydrate() at the bottom.
+// Persist the conversation id so a page reload (a manual refresh, or reopening the
+// tab) reattaches to the SAME durable workflow instead of orphaning it and starting
+// a new one. The workflow survives on the server — this pointer is what lets the UI
+// find it again. (A worker crash doesn't reload the page, so it doesn't need this;
+// only a browser reload loses the in-memory id.) See boot()/rehydrate() at the bottom.
 const CONV_KEY = 'travelAgent.conversationId';
+// Where to keep that pointer. Crashable envs are ephemeral and provisioned fresh
+// (a new crash-<hash> subdomain each time), so they must open on a clean slate and
+// never auto-resume a prior visit's conversation. sessionStorage is scoped to the
+// tab session: it survives an in-demo refresh (rehydrate still reattaches) but is
+// empty on a fresh load / new tab / newly provisioned workspace. Always-on cloud and
+// local dev keep localStorage, so a reload reattaches across browser sessions as before.
+const convStore = window.IS_CRASHABLE === true ? sessionStorage : localStorage;
+// Drop any pointer an older (localStorage-based) build left on a crashable subdomain,
+// so a pre-existing id can't leak into a fresh session on the first load after upgrade.
+if (convStore !== localStorage) { try { localStorage.removeItem(CONV_KEY); } catch { /* ignore */ } }
 const GREETING =
   "Hi! Where would you like to travel? I can find events, flights, and hotels, do a deep-dive research pass on a destination — and book your trip.";
 
@@ -128,13 +139,59 @@ function renderTranscript(messages) {
   for (const m of messages) addMsg(m.role, m.content);
 }
 
+// A long turn can run many seconds (LLM + tool calls), so a static "thinking…"
+// reads as frozen. The indicator is animated (bouncing dots) and, when the caller
+// doesn't name a specific action, it slowly rotates through what the agent is doing
+// so the user stays oriented. A research turn swaps this out for the richer
+// progress card (renderProgress removes the .typing bubble) once its phase lands.
+let typingTimer = null;
+// Kept intentionally generic: this rotation fires for EVERY non-research turn
+// (a question, an itinerary edit, a booking — not just flight/hotel searches), so
+// the phrasing must be true regardless of intent. Naming a specific tool here would
+// lie on the turns that don't run it. Real per-tool narration would need a workflow
+// query surfacing the current step (see setBusy note).
+const WORKING_PHRASES = [
+  'Thinking through your request…',
+  'Working through the details…',
+  'Weighing the best options…',
+  'Pulling your response together…',
+];
+
+function stopTypingRotation() {
+  if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+}
+
 function setBusy(busy, label) {
   $('input').disabled = busy;
   $('send').disabled = busy;
+  stopTypingRotation();
   const t = $('chat').querySelector('.typing');
   if (t) t.remove();
-  if (busy) addMsg('assistant typing', label || 'thinking…');
-  else $('input').focus();
+  if (!busy) { $('input').focus(); return; }
+
+  const bubble = addMsg('assistant typing', '', { counted: false });
+  bubble.innerHTML =
+    '<span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>' +
+    '<span class="typing-label"></span>';
+  const labelEl = bubble.querySelector('.typing-label');
+
+  if (label) { labelEl.textContent = label; return; }  // caller named the action → don't rotate
+
+  let i = 0;
+  labelEl.textContent = WORKING_PHRASES[0];
+  typingTimer = setInterval(() => {
+    i += 1;
+    // Play the list once, then settle on a steady "Still working…" rather than
+    // looping back — cycling the same phrases on a long turn reads as fake. The
+    // dots keep bouncing (CSS), so it still looks alive after we stop rotating.
+    const next = i < WORKING_PHRASES.length ? WORKING_PHRASES[i] : 'Still working…';
+    labelEl.classList.add('fading');                    // fade out, swap text, fade back in
+    setTimeout(() => {
+      labelEl.textContent = next;
+      labelEl.classList.remove('fading');
+    }, 320);
+    if (i >= WORKING_PHRASES.length) stopTypingRotation();
+  }, 2600);
 }
 
 function showError(message) {
@@ -162,6 +219,7 @@ const RPHASE = { planning: 0, searching: 1, writing: 2 };
 const isResearchPhase = (p) => p in RPHASE;
 
 function renderProgress(s) {
+  stopTypingRotation();  // the rich card takes over; kill the generic phrase rotation
   const t = $('chat').querySelector('.typing');
   if (t) t.remove();  // the rich card replaces the plain typing bubble
   let card = $('progress-card');
@@ -338,7 +396,7 @@ async function decide(card, approved) {
 // After an approval signal the turn resumes server-side; poll until a new
 // assistant message lands (or another approval is requested).
 async function pollUntilSettled(baselineAssistant) {
-  for (let i = 0; i < 180; i++) {              // ~3 min — survive a full pod restart
+  for (let i = 0; i < 180; i++) {              // ~3 min — survive a full worker restart
     await new Promise((r) => setTimeout(r, 1000));
     let messages, pending;
     try {
@@ -348,7 +406,7 @@ async function pollUntilSettled(baselineAssistant) {
       ]);
       messages = t.messages; pending = p.pending;
     } catch {
-      continue;                               // env still bouncing — keep the spinner, retry
+      continue;                               // workers still bouncing — keep the spinner, retry
     }
     if (pending) {
       renderTranscript(messages);
@@ -367,15 +425,16 @@ async function pollUntilSettled(baselineAssistant) {
     }
   }
   setBusy(false);
-  showError('The environment is taking a while to come back — refresh to pick up where it left off.');
+  showError('The workers are taking a while to come back — refresh to pick up where it left off.');
 }
 
-// Resilient recovery: crashing the environment takes the worker AND the app pod
-// down, so a live send fails (502 / connection error). The message is a durable
-// Update, so the turn still completes when the pods return — poll until it settles
-// (a turn ends by appending an assistant reply, so we're done when the last entry
-// isn't the user's message), tolerating failures while it's down. Spinner stays up;
-// no refresh needed.
+// Resilient recovery: crashing the environment kills the worker pods (the app
+// pod / this gateway stay up). While the workers bounce, the in-flight update
+// can't be served and the query polls below error — but the message is a durable
+// Update, so Temporal retries the turn on the fresh workers and it still completes.
+// Poll until it settles (a turn ends by appending an assistant reply, so we're done
+// when the last entry isn't the user's message), tolerating query failures while the
+// workers are down. Spinner stays up; no refresh needed.
 async function waitForReply() {
   for (let i = 0; i < 180; i++) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -395,7 +454,7 @@ async function waitForReply() {
     }
   }
   setBusy(false);
-  showError('The environment is taking a while to come back — refresh to pick up where it left off.');
+  showError('The workers are taking a while to come back — refresh to pick up where it left off.');
 }
 
 // ── lazily start the workflow on the first message ──────────────────────────
@@ -403,7 +462,7 @@ async function waitForReply() {
 // default (local), resolved server-side. First send creates the conversation.
 function setConversation(id) {
   conversationId = id;
-  try { localStorage.setItem(CONV_KEY, id); } catch { /* private mode / disabled */ }
+  try { convStore.setItem(CONV_KEY, id); } catch { /* private mode / disabled */ }
   // clickable workflow ID → opens this conversation's workflow in the Temporal UI
   const link = document.createElement('a');
   link.href = `${window.TEMPORAL_UI_BASE}/workflows/${encodeURIComponent(id)}`;
@@ -416,7 +475,7 @@ function setConversation(id) {
 
 function clearConversation() {
   conversationId = null;
-  try { localStorage.removeItem(CONV_KEY); } catch { /* ignore */ }
+  try { convStore.removeItem(CONV_KEY); } catch { /* ignore */ }
   $('conv-id').replaceChildren();
 }
 
@@ -547,8 +606,9 @@ $('as-provider').textContent =
   { anthropic: 'Anthropic API', openai: 'OpenAI API' }[window.LLM_PROVIDER] || 'LLM API';
 $('as-model').textContent = window.LLM_MODEL || 'claude';
 
-// ── runtime components: local shows the `make` commands; cloud swaps in a
-// "Crash workers" button that proxies to the crashable-workspace controller. ──
+// ── runtime components: local shows the `make` commands; cloud swaps in the
+// "Crash workers" / "Scale down workers" buttons that proxy to the
+// crashable-workspace controller. ──
 const isCloudHosted = (window.DEMO_HOSTING || 'local') === 'cloud';
 const isCrashable = window.IS_CRASHABLE === true;
 $('controls-local').hidden = isCloudHosted;
@@ -558,12 +618,14 @@ if (isCloudHosted && window.CATALOG_PROVISION_URL) {
   if (link) link.href = window.CATALOG_PROVISION_URL;
 }
 
-function crashStatus(text, isError) {
-  const el = $('crash-worker-status');
+function setStatus(id, text, isError) {
+  const el = $(id);
   if (!el) return;
   el.textContent = text || '';
   el.classList.toggle('error', !!isError);
 }
+const crashStatus = (text, isError) => setStatus('crash-worker-status', text, isError);
+const scaleStatus = (text, isError) => setStatus('scale-worker-status', text, isError);
 
 const crashBtn = $('control-crash-worker');
 // Only a crashable clone can crash itself (an always-on cloud deploy can't).
@@ -584,6 +646,30 @@ if (crashBtn && isCrashable) {
       crashStatus(err.message, true);
     } finally {
       crashBtn.disabled = false;
+    }
+  };
+}
+
+// Scale down workers: scales the deployment to 0 and leaves it there. Unlike
+// Crash, there's no auto-recovery — workers return only when manually restored
+// in the registry, so the status copy tells the operator that.
+const scaleBtn = $('control-scale-workers');
+if (scaleBtn && isCloudHosted && !isCrashable) {
+  scaleBtn.disabled = true;
+  scaleStatus('This is a shared instance — spin up your own ephemeral workspace below to scale workers.');
+}
+if (scaleBtn && isCrashable) {
+  scaleBtn.onclick = async () => {
+    scaleBtn.disabled = true;
+    scaleStatus('Scaling workers to zero…');
+    try {
+      const r = await call('POST', '/demo-controls/scale-workers');
+      const where = r.host ? ` (${r.host})` : '';
+      scaleStatus(`Workers scaled to zero${where} — the workflow is paused and resumes once you restore workers in the registry.`);
+    } catch (err) {
+      scaleStatus(err.message, true);
+    } finally {
+      scaleBtn.disabled = false;
     }
   };
 }
@@ -681,7 +767,7 @@ async function rehydrate(id) {
 
 async function boot() {
   let stored = null;
-  try { stored = localStorage.getItem(CONV_KEY); } catch { /* ignore */ }
+  try { stored = convStore.getItem(CONV_KEY); } catch { /* ignore */ }
   if (stored && await rehydrate(stored)) return;  // reattached to a live workflow
   freshStart();
 }
