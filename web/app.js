@@ -606,8 +606,9 @@ $('as-provider').textContent =
   { anthropic: 'Anthropic API', openai: 'OpenAI API' }[window.LLM_PROVIDER] || 'LLM API';
 $('as-model').textContent = window.LLM_MODEL || 'claude';
 
-// ── runtime components: local shows the `make` commands; cloud swaps in a
-// "Crash workers" button that proxies to the crashable-workspace controller. ──
+// ── runtime components: local shows the `make` commands; cloud swaps in the
+// "Crash workers" / "Scale down workers" buttons that proxy to the
+// crashable-workspace controller. ──
 const isCloudHosted = (window.DEMO_HOSTING || 'local') === 'cloud';
 const isCrashable = window.IS_CRASHABLE === true;
 $('controls-local').hidden = isCloudHosted;
@@ -617,12 +618,14 @@ if (isCloudHosted && window.CATALOG_PROVISION_URL) {
   if (link) link.href = window.CATALOG_PROVISION_URL;
 }
 
-function crashStatus(text, isError) {
-  const el = $('crash-worker-status');
+function setStatus(id, text, isError) {
+  const el = $(id);
   if (!el) return;
   el.textContent = text || '';
   el.classList.toggle('error', !!isError);
 }
+const crashStatus = (text, isError) => setStatus('crash-worker-status', text, isError);
+const scaleStatus = (text, isError) => setStatus('scale-worker-status', text, isError);
 
 const crashBtn = $('control-crash-worker');
 // Only a crashable clone can crash itself (an always-on cloud deploy can't).
@@ -643,6 +646,30 @@ if (crashBtn && isCrashable) {
       crashStatus(err.message, true);
     } finally {
       crashBtn.disabled = false;
+    }
+  };
+}
+
+// Scale down workers: scales the deployment to 0 and leaves it there. Unlike
+// Crash, there's no auto-recovery — workers return only when manually restored
+// in the registry, so the status copy tells the operator that.
+const scaleBtn = $('control-scale-workers');
+if (scaleBtn && isCloudHosted && !isCrashable) {
+  scaleBtn.disabled = true;
+  scaleStatus('This is a shared instance — spin up your own ephemeral workspace below to scale workers.');
+}
+if (scaleBtn && isCrashable) {
+  scaleBtn.onclick = async () => {
+    scaleBtn.disabled = true;
+    scaleStatus('Scaling workers to zero…');
+    try {
+      const r = await call('POST', '/demo-controls/scale-workers');
+      const where = r.host ? ` (${r.host})` : '';
+      scaleStatus(`Workers scaled to zero${where} — the workflow is paused and resumes once you restore workers in the registry.`);
+    } catch (err) {
+      scaleStatus(err.message, true);
+    } finally {
+      scaleBtn.disabled = false;
     }
   };
 }

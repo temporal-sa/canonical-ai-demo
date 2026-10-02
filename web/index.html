@@ -117,6 +117,21 @@
   .control-btn.danger:hover { background: rgba(217, 138, 62, .16); border-color: rgba(217, 138, 62, .6); }
   .control-status { min-height: 14px; color: var(--muted); font-size: 11px; margin: 10px 3px 0; }
   .control-status.error { color: var(--red); }
+  /* info icon + hover/focus tooltip (pure CSS, keyboard-focusable) */
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 5px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--muted); font-size: 9.5px; font-weight: 700; font-style: normal; line-height: 1; cursor: help; position: relative; vertical-align: middle; transition: color .16s ease, border-color .16s ease; }
+  .info:hover, .info:focus-visible { color: var(--text-soft); border-color: var(--purple-bright); outline: none; }
+  .info::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%) translateY(4px);
+    width: 232px; max-width: 64vw; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 11px;
+    color: var(--text-soft); font-size: 11px; font-weight: 400; line-height: 1.5; letter-spacing: normal; text-align: left; white-space: normal;
+    box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; z-index: 30;
+  }
+  .info::before {
+    content: ""; position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); border: 6px solid transparent;
+    border-top-color: var(--panel-2); opacity: 0; transition: opacity .16s ease; z-index: 31;
+  }
+  .info:hover::after, .info:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .info:hover::before, .info:focus-visible::before { opacity: 1; }
 
   /* ── main chat column ── */
   main { flex: 1; min-height: 0; overflow-y: auto; padding: 64px 24px 28px; scrollbar-color: rgba(255, 255, 255, .15) transparent; }
@@ -364,16 +379,30 @@
         </div>
       </div>
 
-      <!-- Cloud: no shell access — crash the worker pods via the controller. -->
+      <!-- Cloud: no shell access — drive the worker pods via the controller. -->
       <div class="control-list" id="controls-cloud" hidden>
         <div class="control-row">
           <span class="control-copy">
-            <strong>Temporal worker</strong>
-            <span>Crash-recovery: crash the worker pods mid-turn.</span>
+            <strong>Crash workers
+              <span class="info" tabindex="0" role="button" aria-label="What crashing workers does"
+                data-tip="Hard-kills the worker pods mid-turn. Kubernetes restarts them within seconds and the in-flight workflow resumes automatically on the exact next step. The app stays up the whole time — durable execution picks up where it left off.">i</span>
+            </strong>
+            <span>Kill the worker pods mid-turn — they restart automatically in seconds.</span>
           </span>
           <button id="control-crash-worker" type="button" class="control-btn danger">Crash workers</button>
         </div>
         <div id="crash-worker-status" class="control-status" role="status"></div>
+        <div class="control-row">
+          <span class="control-copy">
+            <strong>Scale down workers
+              <span class="info" tabindex="0" role="button" aria-label="What scaling workers to zero does"
+                data-tip="Scales the worker deployment to 0 replicas. Workers stay down until you scale them back up in the registry — the workflow is durably paused the whole time and resumes the moment workers return.">i</span>
+            </strong>
+            <span>Scale workers to zero — they stay down until you restore them in the registry.</span>
+          </span>
+          <button id="control-scale-workers" type="button" class="control-btn danger">Scale to zero</button>
+        </div>
+        <div id="scale-worker-status" class="control-status" role="status"></div>
         <div class="control-row">
           <span class="control-copy">
             <strong>Your own workspace</strong>
