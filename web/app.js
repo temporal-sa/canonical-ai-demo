@@ -650,22 +650,32 @@ if (crashBtn && isCrashable) {
   };
 }
 
-// Scale down workers: scales the deployment to 0 and leaves it there. Unlike
-// Crash, there's no auto-recovery — workers return only when manually restored
-// in the registry, so the status copy tells the operator that.
+// Scale workers: a toggle. "Scale to zero" scales the deployment to 0 (the
+// workflow durably pauses); the button then flips to "Scale back up", which
+// restores the workers and the turn resumes on the exact next step. No
+// auto-recovery — the demoer drives both directions from this one button.
 const scaleBtn = $('control-scale-workers');
 if (scaleBtn && isCloudHosted && !isCrashable) {
   scaleBtn.disabled = true;
   scaleStatus('This is a shared instance — spin up your own ephemeral workspace below to scale workers.');
 }
 if (scaleBtn && isCrashable) {
+  let scaledDown = false;
   scaleBtn.onclick = async () => {
+    const goingDown = !scaledDown;
     scaleBtn.disabled = true;
-    scaleStatus('Scaling workers to zero…');
+    scaleStatus(goingDown ? 'Scaling workers to zero…' : 'Scaling workers back up…');
     try {
-      const r = await call('POST', '/demo-controls/scale-workers');
+      const r = await call('POST', goingDown ? '/demo-controls/scale-workers' : '/demo-controls/scale-up');
       const where = r.host ? ` (${r.host})` : '';
-      scaleStatus(`Workers scaled to zero${where} — the workflow is paused and resumes once you restore workers in the registry.`);
+      scaledDown = goingDown;
+      // Flip the button to the opposite action. Scaling down is destructive
+      // (amber/danger); scaling back up is a restore (neutral).
+      scaleBtn.textContent = scaledDown ? 'Scale back up' : 'Scale to zero';
+      scaleBtn.classList.toggle('danger', !scaledDown);
+      scaleStatus(scaledDown
+        ? `Workers scaled to zero${where} — the workflow is paused. Click “Scale back up” to restore them.`
+        : `Workers scaling back up${where} — the workflow resumes on the exact next step.`);
     } catch (err) {
       scaleStatus(err.message, true);
     } finally {
