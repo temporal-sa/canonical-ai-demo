@@ -249,9 +249,16 @@ class TravelAgentWorkflow:
 
     @workflow.query
     def transcript(self) -> list[ChatMessage]:
-        """What the chat window shows: just the user/assistant text messages."""
+        """What the chat window shows: user turns plus the assistant's FINAL
+        answers. An assistant message that carries a tool call is intermediate
+        narration ("Let me search for flights…") that the happy path never renders
+        (it shows only _last_assistant_text). Including it here would also make a
+        crash-recovery poll settle on that narration before the real answer lands —
+        so filter it out and the trailing message is always a user turn or a final
+        reply."""
         return [m for m in self.messages
-                if m.role in ("user", "assistant") and m.content]
+                if m.content and (m.role == "user"
+                                  or (m.role == "assistant" and not m.tool_calls))]
 
     @workflow.query
     def pending_approval(self) -> PendingConfirmation | None:
