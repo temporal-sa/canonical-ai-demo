@@ -119,9 +119,16 @@ func installHandlers(ctx workflow.Context, s *agentState) error {
 	}{
 		{"is_llm_down", func() (bool, error) { return s.llmDown, nil }},
 		{"transcript", func() ([]ChatMessage, error) {
+			// User turns + the assistant's FINAL answers only. An assistant message
+			// carrying a tool call is intermediate narration ("Let me search for
+			// flights…") the happy path never renders; including it would also make a
+			// crash-recovery poll settle on it before the real answer lands.
 			out := []ChatMessage{}
 			for _, message := range s.messages {
-				if (message.Role == "user" || message.Role == "assistant") && message.Content != "" {
+				if message.Content == "" {
+					continue
+				}
+				if message.Role == "user" || (message.Role == "assistant" && len(message.ToolCalls) == 0) {
 					out = append(out, message)
 				}
 			}

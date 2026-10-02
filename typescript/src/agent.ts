@@ -390,8 +390,16 @@ export async function TravelAgentWorkflow(travellerEmail: string): Promise<void>
 
   // *queries* read workflow state without changing it.
   setHandler(isLlmDown, () => llmDown);
+  // User turns + the assistant's FINAL answers only. An assistant message that
+  // carries a tool call is intermediate narration ("Let me search for flights…")
+  // that the happy path never renders; including it would also make a crash-recovery
+  // poll settle on that narration before the real answer lands.
   setHandler(transcript, () =>
-    messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+    messages.filter(
+      (m) =>
+        !!m.content &&
+        (m.role === 'user' || (m.role === 'assistant' && (!m.tool_calls || m.tool_calls.length === 0)))
+    )
   );
   setHandler(pendingApproval, () => pendingConfirmation);
   setHandler(researchStatus, (): ResearchStatus => ({

@@ -221,8 +221,16 @@ public class TravelAgentWorkflowImpl implements TravelAgentWorkflow {
 
   @Override
   public List<ChatMessage> transcript() {
-    return messages.stream().filter(message -> ("user".equals(message.role()) || "assistant".equals(message.role()))
-        && message.content() != null && !message.content().isBlank()).toList();
+    // User turns + the assistant's FINAL answers only. An assistant message carrying
+    // a tool call is intermediate narration ("Let me search for flights…") the happy
+    // path never renders; including it would also make a crash-recovery poll settle
+    // on it before the real answer lands.
+    return messages.stream()
+        .filter(message -> message.content() != null && !message.content().isBlank()
+            && ("user".equals(message.role())
+                || ("assistant".equals(message.role())
+                    && (message.tool_calls() == null || message.tool_calls().isEmpty()))))
+        .toList();
   }
 
   private String lastAssistant(int start) {

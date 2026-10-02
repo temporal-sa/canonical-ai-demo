@@ -99,7 +99,7 @@ maps it to HTTP 409 using the failure message.
 | Name | Returns |
 |------|---------|
 | `is_llm_down` | `boolean` |
-| `transcript` | `ChatMessage[]` — gateway reads only `role` + `content` |
+| `transcript` | `ChatMessage[]` — gateway reads only `role` + `content`. User turns + **final** assistant answers only: assistant messages that carry `tool_calls` (intermediate narration) are excluded, so the trailing entry is always a user turn or a settled reply (crash-recovery pollers rely on this). |
 | `pending_approval` | `PendingConfirmation \| null` |
 | `research_status` | `ResearchStatus` |
 | `itinerary_view` | `ItineraryItem[]` |

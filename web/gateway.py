@@ -360,6 +360,12 @@ async def scale_workers(request: Request):
     return await _drive_workers("scale-down", cookie, "scale-down")
 
 
+@app.post("/demo-controls/scale-up")
+async def scale_up(request: Request):
+    cookie = _require_crashable_cookie(request, "scale up")
+    return await _drive_workers("scale-up", cookie, "scale-up")
+
+
 # ── serve the web UI same-origin (BACKEND_URL="" in the browser) ─────────────
 @app.get("/config.js")
 async def config_js():
