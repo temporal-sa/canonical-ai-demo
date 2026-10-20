@@ -26,8 +26,12 @@ from models.types import (
     ChatMessage,
     LLMRequest,
     LLMResponse,
+    ReportData,
+    SearchItem,
+    SearchPlan,
     ToolCall,
     ToolRequest,
+    WriteRequest,
 )
 from workflows import agent
 from workflows.agent import TravelAgentWorkflow
@@ -69,6 +73,24 @@ async def stub_tool(req: ToolRequest) -> str:
     return "[]"
 
 
+# Research: three searches, one of which ("down") fails for good.
+@activity.defn(name="plan_searches")
+async def stub_plan(brief: str) -> SearchPlan:
+    return SearchPlan(searches=[SearchItem(query=q, reason="test") for q in ("food", "down", "trips")])
+
+
+@activity.defn(name="web_search")
+async def stub_search(item: SearchItem) -> str:
+    if item.query == "down":
+        raise ApplicationError("out of budget", type="LLMFatalError", non_retryable=True)
+    return f"found {item.query}"
+
+
+@activity.defn(name="write_report")
+async def stub_write(req: WriteRequest) -> ReportData:
+    return ReportData(short_summary="guide", markdown_report="; ".join(req.findings))
+
+
 class AgentWorkflowTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         temporal_path = shutil.which("temporal")
@@ -86,7 +108,7 @@ class AgentWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.client,
             task_queue=TASK_QUEUE,
             workflows=[TravelAgentWorkflow, CheckoutWorkflow],
-            activities=[stub_llm, stub_tool],
+            activities=[stub_llm, stub_tool, stub_plan, stub_search, stub_write],
             workflow_runner=UnsandboxedWorkflowRunner(),
         )
         self.worker_task = asyncio.create_task(self.worker.run())
@@ -181,6 +203,14 @@ class AgentWorkflowTests(unittest.IsolatedAsyncioTestCase):
             result = await asyncio.wait_for(self._send("agent-budget", "Hi"), timeout=30)
 
         self.assertIn("sorry", result.reply)
+
+    async def test_research_writes_the_guide_from_the_searches_that_came_back(self) -> None:
+        await self._start("agent-research")
+        LLM_SCRIPT.append(use("research_destination", query="Tokyo"))
+
+        result = await self._send("agent-research", "Research Tokyo")
+
+        self.assertEqual("found food; found trips", result.reply)
 
     async def test_a_runaway_tool_loop_stops_at_the_step_limit(self) -> None:
         await self._start("agent-runaway")

@@ -393,10 +393,15 @@ async function decide(card, approved) {
   }
 }
 
+// How long the UI waits for a turn: past the worker's LLM budget (5 min), so a
+// turn that's still retrying is never reported as stuck while it can still finish.
+const SETTLE_SECONDS = 330;
+const SLOW_TURN = 'This is taking longer than usual — refresh to pick up where it left off.';
+
 // After an approval signal the turn resumes server-side; poll until a new
 // assistant message lands (or another approval is requested).
 async function pollUntilSettled(baselineAssistant) {
-  for (let i = 0; i < 180; i++) {              // ~3 min — survive a full worker restart
+  for (let i = 0; i < SETTLE_SECONDS; i++) {   // survives a worker restart or an LLM outage
     await new Promise((r) => setTimeout(r, 1000));
     let messages, pending;
     try {
@@ -425,7 +430,7 @@ async function pollUntilSettled(baselineAssistant) {
     }
   }
   setBusy(false);
-  showError('The workers are taking a while to come back — refresh to pick up where it left off.');
+  showError(SLOW_TURN);
 }
 
 // Resilient recovery: crashing the environment kills the worker pods (the app
@@ -436,7 +441,7 @@ async function pollUntilSettled(baselineAssistant) {
 // when the last entry isn't the user's message), tolerating query failures while the
 // workers are down. Spinner stays up; no refresh needed.
 async function waitForReply() {
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < SETTLE_SECONDS; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     let messages, pending;
     try {
@@ -454,7 +459,7 @@ async function waitForReply() {
     }
   }
   setBusy(false);
-  showError('The workers are taking a while to come back — refresh to pick up where it left off.');
+  showError(SLOW_TURN);
 }
 
 // ── lazily start the workflow on the first message ──────────────────────────

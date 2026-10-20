@@ -245,8 +245,8 @@ class TravelAgentWorkflow:
         except ActivityError:
             return LLMResponse(message=ChatMessage(
                 role="assistant",
-                content="I'm sorry — I hit an error I couldn't recover from. "
-                        "Please try again in a moment.",
+                content="I'm sorry — I couldn't reach the AI service, so I've stopped "
+                        "working on this. Please try again in a moment.",
             ))
 
     async def _dispatch(self, call: ToolCall) -> ToolOutcome:
@@ -407,11 +407,20 @@ class TravelAgentWorkflow:
             self.searches_done += 1
             return result
 
-        findings = await asyncio.gather(*[_run_search(s) for s in self.plan])
+        # A search that fails for good (it ran out of budget) costs only its own
+        # facet: write the guide from the ones that came back. Fail only if none did.
+        results = await asyncio.gather(*[_run_search(s) for s in self.plan],
+                                       return_exceptions=True)
+        for r in results:
+            if isinstance(r, BaseException) and not isinstance(r, ActivityError):
+                raise r  # cancellation, or a bug: not ours to swallow
+        findings = [r for r in results if isinstance(r, str)]
+        if not findings:
+            raise results[0]
 
         self.phase = "writing"
         report: ReportData = await workflow.execute_activity(
-            write_report, WriteRequest(brief=query, findings=list(findings)),
+            write_report, WriteRequest(brief=query, findings=findings),
             # Short cap so a worker crash mid-write is retried in ~30s. This is the
             # longest LLM call (a full report) — if a healthy write ever nears 30s,
             # trim write_report's max_tokens rather than raising this.

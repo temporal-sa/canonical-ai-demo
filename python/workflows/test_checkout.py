@@ -14,6 +14,7 @@ from temporalio.worker import Worker
 
 import config
 from activities import checkout as checkout_activities
+from activities import db
 from models.types import (
     CheckoutRequest,
     CheckoutReservation,
@@ -227,6 +228,7 @@ class FinalizeIdempotencyTests(unittest.TestCase):
             conn.execute("DELETE FROM booking_line WHERE booking_id IN "
                          "(SELECT booking_id FROM booking WHERE account_key = %s)", (self.account,))
             conn.execute("DELETE FROM booking WHERE account_key = %s", (self.account,))
+            conn.execute("DELETE FROM invoice WHERE account_key = %s", (self.account,))
 
     def test_retry_after_commit_returns_the_same_booking(self) -> None:
         req = FinalizeRequest(checkout_id=f"{self.account}-checkout-1", checkout=self.request)
@@ -248,6 +250,12 @@ class FinalizeIdempotencyTests(unittest.TestCase):
             FinalizeRequest(checkout_id=checkout_id, checkout=self.request))
         self.assertEqual(1, checkout_activities.void_booking(checkout_id))
         self.assertEqual(0, checkout_activities.void_booking(checkout_id))
+
+    def test_a_retried_invoice_returns_the_same_invoice(self) -> None:
+        key = f"{self.account}-invoice-1"
+        first = db.record_invoice(self.account, 250.0, "DA101", idempotency_key=key)
+        retried = db.record_invoice(self.account, 250.0, "DA101", idempotency_key=key)
+        self.assertEqual(first["invoice_id"], retried["invoice_id"])
 
 
 if __name__ == "__main__":
