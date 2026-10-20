@@ -395,27 +395,76 @@ def items_already_booked(account_key: str, items: list[dict]) -> list[dict]:
         }).fetchall()
 
 
-def record_invoice(account_key: str, amount: float, flight_details: str) -> dict:
+def record_invoice(account_key: str, amount: float, flight_details: str,
+                   idempotency_key: str) -> dict:
     """The terminal action of the flight-booking flow (CreateInvoice). Records an
     invoice for the chosen flight, scoped to this conversation. Called only from
-    an activity, and only after the traveller confirms."""
+    an activity, and only after the traveller confirms.
+
+    Idempotent on `idempotency_key`: a retry after a commit we never heard back
+    about returns the invoice already written. The UNIQUE column backs that up if
+    two attempts race."""
     with _connect() as conn:
+        existing = conn.execute(
+            "SELECT invoice_id, amount, flight_details FROM invoice WHERE idempotency_key = %s",
+            (idempotency_key,),
+        ).fetchone()
+        if existing:
+            return {"invoice_id": existing["invoice_id"], "amount": float(existing["amount"]),
+                    "flight_details": existing["flight_details"], "status": "invoiced"}
         invoice_id = conn.execute(
             "SELECT coalesce(max(invoice_id), 0) + 1 AS id FROM invoice"
         ).fetchone()["id"]
         conn.execute(
-            """INSERT INTO invoice (invoice_id, account_key, created_at, amount, flight_details)
-               VALUES (%s, %s, now(), %s, %s)""",
-            (invoice_id, account_key, float(amount), flight_details),
+            """INSERT INTO invoice (invoice_id, account_key, created_at, amount, flight_details,
+                                    idempotency_key)
+               VALUES (%s, %s, now(), %s, %s, %s)""",
+            (invoice_id, account_key, float(amount), flight_details, idempotency_key),
         )
         return {"invoice_id": invoice_id, "amount": float(amount),
                 "flight_details": flight_details, "status": "invoiced"}
 
 
-def record_booking(account_key: str, items: list[dict], summary: str) -> dict:
+def booking_for_checkout(checkout_id: str) -> dict | None:
+    """The booking a checkout already recorded, if any (see record_booking)."""
+    with _connect() as conn:
+        booking = conn.execute(
+            "SELECT booking_id, total FROM booking WHERE checkout_id = %s", (checkout_id,)
+        ).fetchone()
+        if not booking:
+            return None
+        lines = conn.execute(
+            """SELECT kind, ref_id, title, price FROM booking_line
+               WHERE booking_id = %s ORDER BY booking_line_id""",
+            (booking["booking_id"],),
+        ).fetchall()
+    return {
+        "booking_id": booking["booking_id"],
+        "items": [{"kind": l["kind"], "ref_id": l["ref_id"], "title": l["title"] or "",
+                   "price": float(l["price"] or 0)} for l in lines],
+        "total": float(booking["total"]),
+    }
+
+
+def void_booking(checkout_id: str) -> int:
+    """Compensation for record_booking: delete the checkout's booking if it was
+    written. Idempotent — voiding twice, or voiding nothing, is fine."""
+    with _connect() as conn:
+        conn.execute(
+            """DELETE FROM booking_line WHERE booking_id IN
+                 (SELECT booking_id FROM booking WHERE checkout_id = %s)""",
+            (checkout_id,),
+        )
+        return conn.execute("DELETE FROM booking WHERE checkout_id = %s", (checkout_id,)).rowcount
+
+
+def record_booking(account_key: str, items: list[dict], summary: str,
+                   checkout_id: str) -> dict:
     """The side effect: create a booking + line items. Called only from an
-    activity, and only after human approval. Keyed on account_key (the workflow
-    ID) so each conversation is self-contained — no seeding, no reset needed."""
+    activity, and only after human approval. Scoped by account_key (the
+    conversation's workflow ID) so each conversation is self-contained — no
+    seeding, no reset needed — and keyed by checkout_id, whose UNIQUE constraint
+    stops two racing attempts of the same checkout both inserting."""
     if not items:
         raise ValueError("Nothing to book — the itinerary is empty.")
     total = round(sum(float(it.get("price") or 0) for it in items), 2)
@@ -424,9 +473,10 @@ def record_booking(account_key: str, items: list[dict], summary: str) -> dict:
             "SELECT coalesce(max(booking_id), 0) + 1 AS id FROM booking"
         ).fetchone()["id"]
         conn.execute(
-            """INSERT INTO booking (booking_id, account_key, created_at, total, summary)
-               VALUES (%s, %s, now(), %s, %s)""",
-            (booking_id, account_key, total, summary),
+            """INSERT INTO booking (booking_id, account_key, created_at, total, summary,
+                                    checkout_id)
+               VALUES (%s, %s, now(), %s, %s, %s)""",
+            (booking_id, account_key, total, summary, checkout_id),
         )
         line_id = conn.execute(
             "SELECT coalesce(max(booking_line_id), 0) AS id FROM booking_line"

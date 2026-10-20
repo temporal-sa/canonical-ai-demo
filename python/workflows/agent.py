@@ -33,6 +33,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.tools import execute_tool
     from models.types import (
+        AgentState,
         ApprovalDecision,
         ChatMessage,
         CheckoutRequest,
@@ -52,11 +53,15 @@ with workflow.unsafe.imports_passed_through():
     from prompts import system_prompt
     from workflows.checkout import CheckoutWorkflow
 
-# Retry policies. Temporal retries a failed Activity for you — no try/except
-# needed. maximum_attempts is unset, so it retries forever with backoff: a
-# transient outage (rate limit, DB down) just waits and recovers on its own.
-# The listed error types are permanent failures retrying can't fix, so they
-# stop immediately instead.
+# Failure handling, in three layers:
+#   1. Classify what you know. Errors that retrying can't fix (bad request,
+#      rejected key) are raised as LLMFatalError and stop at once.
+#   2. Retry everything else with backoff, so a rate limit or a DB blip just
+#      waits and recovers. No try/except needed.
+#   3. Bound what you don't know. Each Activity also gets a total budget
+#      (schedule_to_close), so an error nobody classified ends the turn with an
+#      apology instead of retrying forever. The budgets comfortably outlast a
+#      real provider outage, or the demo's LLM kill-switch being left on a while.
 LLM_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     backoff_coefficient=2.0,
@@ -67,8 +72,17 @@ TOOL_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     backoff_coefficient=2.0,
     maximum_interval=timedelta(seconds=10),
-    non_retryable_error_types=["BookingDeclined"],
 )
+LLM_BUDGET = timedelta(minutes=5)
+TOOL_BUDGET = timedelta(minutes=2)
+
+# Guard rails for a workflow that lives as long as the conversation.
+MAX_STEPS_PER_TURN = 12             # tool rounds before the agent stops and asks
+APPROVAL_TIMEOUT = timedelta(hours=24)  # an unanswered approval expires as declined
+IDLE_TIMEOUT = timedelta(days=7)    # a conversation idle this long closes
+# Continue-as-new once the event history passes this, or when the server
+# suggests it, so a long conversation never nears the history limits.
+CONTINUE_AS_NEW_AFTER_EVENTS = 2_000
 
 
 @dataclass
@@ -91,14 +105,22 @@ def simulate_hotel_failure_for_attempt(attempt: int) -> bool:
 
 @workflow.defn
 class TravelAgentWorkflow:
-    def __init__(self) -> None:
-        self.messages: list[ChatMessage] = []
-        self.account_key: str = ""  # who we save data under (set in run)
+    @workflow.init
+    def __init__(self, traveller_email: str, state: AgentState | None = None) -> None:
+        # Each conversation is its own workflow with its own ID. We save data
+        # (bookings) under that ID, so every chat is isolated and starts clean —
+        # no reset needed between demos. The email is just for display. The ID
+        # survives continue-as-new, so the key does too.
+        self.account_key: str = workflow.info().workflow_id
+        self.messages: list[ChatMessage] = [
+            ChatMessage(role="system", content=system_prompt(traveller_email))
+        ]
         self.pending_confirmation: PendingConfirmation | None = None
         self.approval: ApprovalDecision | None = None
         self.turn_in_progress: bool = False
         self.llm_down: bool = False  # demo kill-switch, scoped to THIS conversation
         self.checkout_attempt: int = 0
+        self.invoice_count: int = 0
 
         # The itinerary is just workflow state — a durable list, no DB table needed.
         self.itinerary: list[ItineraryItem] = []
@@ -119,60 +141,97 @@ class TravelAgentWorkflow:
             "create_invoice": self._h_create_invoice,       # gated
         }
 
+        # Continued-as-new: pick the conversation up exactly where it was. This
+        # happens here, not in run(), because a message can arrive in the new
+        # run's very first task, and its update handler runs before run() starts.
+        if state is not None:
+            self.messages = state.messages
+            self.itinerary = state.itinerary
+            self.checkout_attempt = state.checkout_attempt
+            self.invoice_count = state.invoice_count
+            self.llm_down = state.llm_down
+
     @workflow.run
-    async def run(self, traveller_email: str) -> None:
-        self.messages.append(ChatMessage(role="system", content=system_prompt(traveller_email)))
-
-        # Each conversation is its own workflow with its own ID. We save data
-        # (bookings) under that ID, so every chat is isolated and starts clean —
-        # no reset needed between demos. The email is just for display.
-        self.account_key = workflow.info().workflow_id
-
+    async def run(self, traveller_email: str, state: AgentState | None = None) -> None:
         while True:
             # 01 RECEIVE INPUT — wait for a chat message. The send_message update
-            # drops it in and flips this flag to wake us up.
-            await workflow.wait_condition(lambda: self.turn_in_progress)
+            # drops it in and flips this flag to wake us up. A conversation left
+            # idle long enough just ends; the UI starts a fresh one.
+            try:
+                await workflow.wait_condition(
+                    lambda: self.turn_in_progress, timeout=IDLE_TIMEOUT,
+                    timeout_summary="conversation idle",
+                )
+            except asyncio.TimeoutError:
+                if not self.turn_in_progress:  # a message landing with the timer wins
+                    return
 
-            while True:
-                # 02 PLAN — ask the LLM what to do next. It runs as an Activity, so
-                # Temporal retries it if the provider is down (see _think).
-                response = await self._think()
-                self.messages.append(response.message)
-
-                # No tool call means the LLM gave its final answer → turn is done.
-                if not response.message.tool_calls:
-                    break
-
-                # 03 EXECUTE TOOLS — run each tool the LLM asked for. _dispatch
-                # picks the behavior, so the loop stays generic. We hold any
-                # terminal answer until every tool result is recorded.
-                final_answer: str | None = None
-                for call in response.message.tool_calls:
-                    outcome = await self._dispatch(call)
-                    self.messages.append(
-                        ChatMessage(role="tool", content=outcome.result, tool_call_id=call.id)
-                    )
-                    if outcome.terminal:
-                        final_answer = outcome.assistant_text
-
-                # 04 PERSIST STATE — nothing to do here. self.messages and
-                # self.itinerary are workflow state; Temporal saves them for you.
-
-                # 05 LOOP / TERMINATE — a terminal tool's output is the answer, so
-                # show it and stop. Otherwise loop back so the LLM can read the
-                # tool results and decide the next step.
-                if final_answer is not None:
-                    self.messages.append(ChatMessage(role="assistant", content=final_answer))
-                    break
-
+            await self._take_turn()
             self.phase = "idle"
             self.turn_in_progress = False
+
+            # Between turns is the one safe point to continue-as-new: nothing is
+            # in flight. Let the update handler that just finished return its
+            # reply first, then start a fresh run carrying the state forward.
+            info = workflow.info()
+            if (info.is_continue_as_new_suggested()
+                    or info.get_current_history_length() > CONTINUE_AS_NEW_AFTER_EVENTS):
+                await workflow.wait_condition(workflow.all_handlers_finished)
+                workflow.continue_as_new(args=[traveller_email, AgentState(
+                    messages=self.messages,
+                    itinerary=self.itinerary,
+                    checkout_attempt=self.checkout_attempt,
+                    invoice_count=self.invoice_count,
+                    llm_down=self.llm_down,
+                )])
+
+    async def _take_turn(self) -> None:
+        """One chat turn: the agent loop, bounded so a model that keeps calling
+        tools can't spin forever."""
+        for _ in range(MAX_STEPS_PER_TURN):
+            # 02 PLAN — ask the LLM what to do next. It runs as an Activity, so
+            # Temporal retries it if the provider is down (see _think).
+            response = await self._think()
+            self.messages.append(response.message)
+
+            # No tool call means the LLM gave its final answer → turn is done.
+            if not response.message.tool_calls:
+                return
+
+            # 03 EXECUTE TOOLS — run each tool the LLM asked for. _dispatch
+            # picks the behavior, so the loop stays generic. We hold any
+            # terminal answer until every tool result is recorded.
+            final_answer: str | None = None
+            for call in response.message.tool_calls:
+                outcome = await self._dispatch(call)
+                self.messages.append(
+                    ChatMessage(role="tool", content=outcome.result, tool_call_id=call.id)
+                )
+                if outcome.terminal:
+                    final_answer = outcome.assistant_text
+
+            # 04 PERSIST STATE — nothing to do here. self.messages and
+            # self.itinerary are workflow state; Temporal saves them for you.
+
+            # 05 LOOP / TERMINATE — a terminal tool's output is the answer, so
+            # show it and stop. Otherwise loop back so the LLM can read the
+            # tool results and decide the next step.
+            if final_answer is not None:
+                self.messages.append(ChatMessage(role="assistant", content=final_answer))
+                return
+
+        self.messages.append(ChatMessage(
+            role="assistant",
+            content="I've taken a lot of steps on this without finishing. "
+                    "Could you narrow down what you'd like me to do next?",
+        ))
 
     # ── the loop's two helpers ───────────────────────────────────────────────────
     async def _think(self) -> LLMResponse:
         """02 PLAN: call the LLM as an Activity so Temporal retries transient
-        failures. If it fails for good, return a plain apology (no tool call) so
-        the loop ends the turn gracefully and the chat stays alive."""
+        failures. If it fails for good (a fatal error, or the budget runs out),
+        return a plain apology (no tool call) so the loop ends the turn
+        gracefully and the chat stays alive."""
         try:
             return await workflow.execute_activity(
                 call_llm,
@@ -180,6 +239,7 @@ class TravelAgentWorkflow:
                 # Short cap: a worker crash mid-call is retried in ~30s instead of
                 # ~60s. These generations are short, so a healthy call never nears it.
                 start_to_close_timeout=timedelta(seconds=30),
+                schedule_to_close_timeout=LLM_BUDGET,
                 retry_policy=LLM_RETRY,
             )
         except ActivityError:
@@ -209,6 +269,7 @@ class TravelAgentWorkflow:
             # execute_tool is just DB work + the ~1s demo pacing delay, so a tight
             # cap makes a worker crash mid-tool retry in ~15s.
             start_to_close_timeout=timedelta(seconds=15),
+            schedule_to_close_timeout=TOOL_BUDGET,
             retry_policy=TOOL_RETRY,
             summary=call.name,
         )
@@ -232,10 +293,27 @@ class TravelAgentWorkflow:
             return TurnResult(status="awaiting_approval", reply=reply)
         return TurnResult(status="reply", reply=reply)
 
+    @send_message.validator
+    def _validate_send_message(self, text: str) -> None:
+        """Reject, don't queue. A message accepted mid-turn would land between a
+        tool call and its result, and the LLM would refuse the transcript. A
+        rejected update never enters history; the gateway turns it into a 409."""
+        if self.pending_confirmation is not None:
+            raise ValueError("Approve or decline the pending action first.")
+        if self.turn_in_progress:
+            raise ValueError("A turn is already in progress.")
+        if not text.strip():
+            raise ValueError("The message is empty.")
+
     # A *signal* sends input in without waiting for a result (fire-and-forget).
     @workflow.signal
     def confirm_action(self, decision: ApprovalDecision) -> None:
-        """The human approved or rejected the paused action (a booking/invoice)."""
+        """The human approved or rejected the paused action (a booking/invoice).
+        Ignored unless something is waiting: a stray or repeated signal must never
+        sit in state and approve the NEXT gated action without a human."""
+        if self.pending_confirmation is None:
+            workflow.logger.warning("confirm_action ignored: nothing is awaiting approval")
+            return
         self.approval = decision
 
     @workflow.signal
@@ -285,7 +363,10 @@ class TravelAgentWorkflow:
     # (that would just repeat it). It still goes into history so follow-ups stay
     # grounded ("add the nonstop flight").
     async def _h_research(self, call: ToolCall) -> ToolOutcome:
-        report = await self._research(call.args.get("query", ""))
+        try:
+            report = await self._research(call.args.get("query", ""))
+        finally:
+            self.phase = "idle"  # also when a search fails for good, so the UI's card closes
         return ToolOutcome(
             result=f"{report.short_summary}\n\n{report.markdown_report}",
             terminal=True,
@@ -304,6 +385,7 @@ class TravelAgentWorkflow:
             # Short cap so a worker crash mid-plan is retried in ~30s; the plan is
             # a small structured call, well under this.
             start_to_close_timeout=timedelta(seconds=30),
+            schedule_to_close_timeout=LLM_BUDGET,
             retry_policy=LLM_RETRY,
         )
         self.plan = plan.searches
@@ -319,6 +401,7 @@ class TravelAgentWorkflow:
                 web_search, item,
                 start_to_close_timeout=timedelta(seconds=120),
                 heartbeat_timeout=timedelta(seconds=30),
+                schedule_to_close_timeout=LLM_BUDGET,
                 retry_policy=LLM_RETRY,
             )
             self.searches_done += 1
@@ -333,9 +416,9 @@ class TravelAgentWorkflow:
             # longest LLM call (a full report) — if a healthy write ever nears 30s,
             # trim write_report's max_tokens rather than raising this.
             start_to_close_timeout=timedelta(seconds=30),
+            schedule_to_close_timeout=LLM_BUDGET,
             retry_policy=LLM_RETRY,
         )
-        self.phase = "idle"
         return report
 
     # The Activity looks up the catalog row; the itinerary itself is workflow
@@ -344,6 +427,7 @@ class TravelAgentWorkflow:
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=call, account_key=self.account_key),
             start_to_close_timeout=timedelta(seconds=15),  # DB work + ~1s pacing
+            schedule_to_close_timeout=TOOL_BUDGET,
             retry_policy=TOOL_RETRY, summary=call.name,
         )
         rows = json.loads(result)
@@ -380,8 +464,16 @@ class TravelAgentWorkflow:
     # GATED write actions: pause for the human to approve, then do the work.
     async def _await_confirmation(self) -> ApprovalDecision:
         """Pause until the human decides. wait_condition is a *durable* pause — it
-        survives a worker restart and costs nothing while waiting."""
-        await workflow.wait_condition(lambda: self.approval is not None)
+        survives a worker restart and costs nothing while waiting. An approval
+        nobody answers expires as a decline rather than holding the turn open."""
+        try:
+            await workflow.wait_condition(
+                lambda: self.approval is not None, timeout=APPROVAL_TIMEOUT,
+                timeout_summary="approval expired",
+            )
+        except asyncio.TimeoutError:
+            if self.approval is None:
+                self.approval = ApprovalDecision(approved=False, reason="the approval expired")
         decision, self.approval, self.pending_confirmation = self.approval, None, None
         return decision
 
@@ -420,6 +512,9 @@ class TravelAgentWorkflow:
                 ),
             ),
             id=checkout_id,
+            # If this conversation is closed mid-checkout, ask the child to cancel
+            # (it compensates) rather than kill it with reservations half-made.
+            parent_close_policy=workflow.ParentClosePolicy.REQUEST_CANCEL,
             static_summary="Agent-invoked durable checkout",
             static_details=(
                 "Books itinerary items in order and compensates completed "
@@ -448,11 +543,16 @@ class TravelAgentWorkflow:
             reason = f" Reason: {decision.reason}" if decision.reason else ""
             return ToolOutcome(result=f"The traveller DECLINED the invoice.{reason}")
 
-        invoice_call = ToolCall(id="invoice", name="create_invoice",
-                                args={"amount": amount, "flight_details": flight_details})
+        # The workflow mints the idempotency key, so a retry can't invoice twice.
+        self.invoice_count += 1
+        invoice_call = ToolCall(id="invoice", name="create_invoice", args={
+            "amount": amount, "flight_details": flight_details,
+            "idempotency_key": f"{self.account_key}-invoice-{self.invoice_count}",
+        })
         result = await workflow.execute_activity(
             execute_tool, ToolRequest(call=invoice_call, account_key=self.account_key),
             start_to_close_timeout=timedelta(seconds=15),  # DB work + ~1s pacing
+            schedule_to_close_timeout=TOOL_BUDGET,
             retry_policy=TOOL_RETRY, summary=invoice_call.name,
         )
         return ToolOutcome(result=result)

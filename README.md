@@ -105,10 +105,17 @@ Everything else is supporting cast:
    searches as **parallel Activities**. Kill the worker mid-fan-out and restart:
    only the unfinished searches re-run — completed ones replay from history.
 6. **Injectable failure.** The Demo-controls drawer has a per-conversation LLM
-   kill-switch: flip it and every LLM call retries until you flip it back.
+   kill-switch: flip it and every LLM call retries until you flip it back (or
+   for 5 minutes, each call's total budget, then the agent apologises).
 7. **Agent → workflow.** After the human approves `book_trip`, the agent starts
    a child `CheckoutWorkflow`. It books the flight, hits the demo hotel failure,
    and compensates with `cancel_flight` using a plain `try`/`except` and loop.
+8. **Retry-safe by construction.** The workflow mints every idempotency key
+   (reservation IDs, the booking record, invoices), so a step retried after a
+   crash is recognised instead of repeated. Errors are handled in three layers:
+   classify the permanent ones, retry the rest, and give every LLM and tool call
+   a total budget so nothing unforeseen retries forever. A worker without its
+   LLM key refuses to start.
    The agent owns judgment; the child workflow owns execution guarantees.
 
 ---

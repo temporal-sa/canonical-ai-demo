@@ -18,6 +18,7 @@ ride out the outage and recover.
 """
 
 import json
+import os
 import random
 
 import anthropic
@@ -63,6 +64,14 @@ async def _guard() -> None:
 
 
 def _client() -> anthropic.AsyncAnthropic:
+    # Research always uses Claude, whatever LLM_PROVIDER drives the chat. Without
+    # a key the SDK fails before sending anything, with an error nothing would
+    # classify, so say so up front and stop: retrying can't conjure a key.
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise ApplicationError(
+            "research_destination needs ANTHROPIC_API_KEY", type="LLMFatalError",
+            non_retryable=True,
+        )
     return anthropic.AsyncAnthropic(max_retries=0)
 
 

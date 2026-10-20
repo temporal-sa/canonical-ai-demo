@@ -73,7 +73,8 @@ Read by `config.py`. All optional except the API key.
 python/
 ├── worker.py          # entrypoint: polls travel-agent, runs workflow + activities
 ├── workflows/agent.py    # TravelAgentWorkflow — the durable ReAct loop + HITL + fan-out
-├── workflows/checkout.py # CheckoutWorkflow — ordered booking + compensation
+├── workflows/checkout.py # CheckoutWorkflow — ordered booking + compensation (the saga rules)
+├── workflows/test_*.py   # workflow + activity tests (see Tests)
 ├── activities/           # includes retry-safe checkout provider steps
 ├── prompts.py         # system prompt + TOOLS + research prompts/schemas
 ├── models/types.py    # pydantic models
@@ -89,7 +90,7 @@ The agent loop in `workflows/agent.py` **is** the demo — see the root
 make kill-worker   # mid-turn: the loop freezes…
 make worker        #   …and resumes on the exact next step
 make kill-db       # mid-turn: the tool activity retries with backoff (watch the UI)
-make db            #   …and the next retry just succeeds
+make db            #   …and the next retry just succeeds (within its 2-minute budget)
 ```
 
 Approve a trip containing a flight and hotel to run `CheckoutWorkflow`:
@@ -99,7 +100,19 @@ Later checkout attempts in the same agent session run normally. Set
 
 Plus the **Demo controls** drawer (top-right in the UI) → flip the **LLM API**
 switch to simulate a provider outage; the turn's LLM calls retry until you flip
-it back.
+it back, for up to 5 minutes before the agent gives up and apologises.
+
+## Tests
+
+```bash
+uv run python -m unittest discover -s workflows -p 'test_*.py' -t .
+```
+
+The workflow tests run against a local dev server (the Temporal CLI must be on
+PATH) with stub LLM and tool activities, so they need no API key: the saga's
+compensation rules, cancellation, the guard rails (step limit, budgets,
+approval expiry, idle close), continue-as-new, and a sandboxed replay check.
+The finalize idempotency tests need the demo Postgres and skip without it.
 
 ## Switching SDKs
 

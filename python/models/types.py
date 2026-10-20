@@ -111,8 +111,10 @@ class CheckoutRequest(BaseModel):
 
 
 class CheckoutStepRequest(BaseModel):
-    account_key: str
     item: ItineraryItem
+    # The idempotency key, minted by the workflow and handed to the supplier, so a
+    # retried booking returns the same reservation instead of making a second one.
+    reservation_id: str
     simulate_hotel_failure: bool = False
 
 
@@ -124,6 +126,11 @@ class CheckoutReservation(BaseModel):
     status: Literal["booked", "cancelled"] = "booked"
 
 
+class FinalizeRequest(BaseModel):
+    checkout_id: str  # idempotency key for the booking record: one booking per checkout
+    checkout: CheckoutRequest
+
+
 class CheckoutResult(BaseModel):
     status: Literal["booked", "compensated"]
     message: str
@@ -132,3 +139,14 @@ class CheckoutResult(BaseModel):
     compensations: list[CheckoutReservation] = Field(default_factory=list)
     failure: str | None = None
     booking_id: int | None = None
+
+
+# ── continue-as-new ──────────────────────────────────────────────────────────
+class AgentState(BaseModel):
+    """Everything a conversation needs to carry into its next run when the
+    workflow continues-as-new to keep its event history short."""
+    messages: list[ChatMessage]
+    itinerary: list[ItineraryItem] = Field(default_factory=list)
+    checkout_attempt: int = 0
+    invoice_count: int = 0
+    llm_down: bool = False

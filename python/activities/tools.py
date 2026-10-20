@@ -19,25 +19,6 @@ from . import db
 from models.types import ToolRequest
 
 
-def _settle_booking(account_key: str, items: list[dict], summary: str) -> dict:
-    """Book the itinerary with one business rule: you can't book the same flight
-    or hotel twice.
-
-    That's the UNRECOVERABLE failure — a non-retryable BookingDeclined that
-    Temporal does NOT retry (contrast the LLM kill-switch, which IS retried).
-    The workflow surfaces it to the traveller and the conversation continues.
-    """
-    already = db.items_already_booked(account_key, items)
-    if already:
-        names = ", ".join(f'"{a["title"]}"' for a in already)
-        raise ApplicationError(
-            f"Booking declined — this trip already includes {names}.",
-            type="BookingDeclined",
-            non_retryable=True,
-        )
-    return db.record_booking(account_key, items, summary)
-
-
 @activity.defn
 def execute_tool(req: ToolRequest) -> str:
     # Demo pacing beat: DB lookups are instant, so give each tool call a visible
@@ -69,11 +50,12 @@ def execute_tool(req: ToolRequest) -> str:
             # Just the lookup — the workflow owns itinerary STATE (durable,
             # conversation-scoped). Unknown refs are dropped so the model reacts.
             result = db.get_itinerary_items(args["items"])
-        elif name == "book_trip":
-            result = _settle_booking(req.account_key, args["items"], args.get("summary", ""))
         elif name == "create_invoice":
-            # Runs only after the traveller confirms (the workflow gates it).
-            result = db.record_invoice(req.account_key, args["amount"], args["flight_details"])
+            # Runs only after the traveller confirms (the workflow gates it). The
+            # workflow mints the idempotency key, so a retry can't invoice twice.
+            # (book_trip never reaches here: the workflow runs CheckoutWorkflow.)
+            result = db.record_invoice(req.account_key, args["amount"], args["flight_details"],
+                                       args["idempotency_key"])
         else:
             raise ApplicationError(f"Unknown tool: {name}", non_retryable=True)
     except ValueError as e:

@@ -21,6 +21,7 @@ from activities.checkout import (
     cancel_flight,
     cancel_hotel,
     finalize_checkout,
+    void_booking,
 )
 from activities.llm import call_llm
 from activities.research import (
@@ -34,6 +35,11 @@ from workflows.checkout import CheckoutWorkflow
 
 
 async def main() -> None:
+    # Fail fast on configuration. Without a key, every LLM call fails before it
+    # leaves the process; refusing to start is clearer than polling for work.
+    if missing := config.missing_llm_key():
+        raise SystemExit(f"worker not started: set {missing} for LLM_PROVIDER="
+                         f"{config.LLM_PROVIDER} (see .env.example)")
     client = await config.temporal_client()
     control.set_client(client)  # so call_llm can read its conversation's kill-switch
     with ThreadPoolExecutor(max_workers=8) as activity_executor:
@@ -54,6 +60,7 @@ async def main() -> None:
                 cancel_hotel,
                 cancel_activity,
                 finalize_checkout,
+                void_booking,
             ],
             activity_executor=activity_executor,
         )

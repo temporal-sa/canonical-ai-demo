@@ -29,7 +29,16 @@ everything below. Target *this document*, not the Python source.
 
 The workflow does **not** return a meaningful value — it stays alive for the
 whole conversation, serving updates and queries. (Conversation = workflow
-lifetime.)
+lifetime.) Two lifecycle rules keep that safe:
+
+- **Idle close.** A conversation with no message for 7 days completes. The UI
+  checks `/status` on reload and starts a fresh conversation for a closed one.
+- **Continue-as-new.** Between turns, once the history grows long (or the server
+  suggests it), the workflow continues-as-new under the same workflow ID,
+  carrying the conversation forward. The Python worker passes it as an optional
+  second start argument (`AgentState`); the gateway only ever sends the email.
+  Restore that state before handlers run (Python: `@workflow.init`), because a
+  message can arrive in the new run's first workflow task.
 
 ### Agent → checkout child workflow
 
@@ -59,7 +68,23 @@ After the traveller approves `book_trip`, `TravelAgentWorkflow` starts a child
 ```
 
 The child reserves flights, hotels, and activities in that order. If a step
-fails it compensates completed reservations in reverse order. For the default
+fails it compensates in reverse order. The saga rules every SDK should match:
+
+- **The workflow mints the idempotency keys**, from the checkout's workflow ID:
+  each reservation ID (sent to the supplier), and the booking record's
+  `booking.checkout_id`. A retry is recognised; a later attempt never reuses an
+  earlier, cancelled reservation.
+- **Register each undo before its step runs.** A step whose outcome is unknown
+  (retries exhausted, timed out) is compensated too, since cancelling by ID is
+  safe either way. Only a definite decline (`HotelBookingFailed`,
+  `BookingDeclined`) leaves nothing to undo.
+- **`finalize_checkout` is idempotent on `checkout_id`**: a retry after a
+  commit returns the existing booking instead of declining it as a duplicate.
+  Its undo is `void_booking`.
+- **Compensations retry without an attempt limit.** Forward steps give up after 3.
+- **Cancellation compensates.** The agent starts the child with parent-close
+  policy `REQUEST_CANCEL`; a cancelled checkout undoes what it may have booked,
+  then stays cancelled. For the default
 demo configuration, the first checkout attempt sets
 `simulate_hotel_failure: true`: `book_flight` succeeds, `book_hotel` raises the
 non-retryable `HotelBookingFailed`, and `cancel_flight` succeeds. The child then
@@ -87,11 +112,15 @@ assistant's text. If the update **fails** (e.g. "a turn is already in progress",
 or a non-retryable business decline), raise an application error — the gateway
 maps it to HTTP 409 using the failure message.
 
+Reject a message with an **update validator** (it never enters history) while a
+turn is in progress or an approval is pending. A message accepted mid-turn
+lands between a tool call and its result, and the LLM refuses the transcript.
+
 ### Signals
 
 | Name | Args |
 |------|------|
-| `confirm_action` | `ApprovalDecision` = `{ "approved": boolean, "reason": string \| null }` |
+| `confirm_action` | `ApprovalDecision` = `{ "approved": boolean, "reason": string \| null }`. **Ignore it when nothing is pending**, so a stray or repeated signal can't approve the *next* action. An approval unanswered for 24 hours expires as declined. |
 | `set_llm_status` | `down: boolean` — the per-conversation LLM kill-switch |
 
 ### Queries

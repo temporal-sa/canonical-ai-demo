@@ -37,6 +37,18 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
+
+LLM_KEY_VARS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
+def missing_llm_key() -> str | None:
+    """The chat provider's API-key env var, if it isn't set. Checked once at
+    worker startup: a worker that can't run the agent loop shouldn't take tasks
+    it can only fail. (research_destination always uses Claude; without
+    ANTHROPIC_API_KEY it fails fast on its own and the agent says so.)"""
+    name = LLM_KEY_VARS[LLM_PROVIDER]
+    return None if os.getenv(name) else name
+
 # research_destination snappiness: cap how many web searches each search activity
 # may run. 1 = a single focused lookup per facet (fastest — tames the slow-outlier
 # that gates the parallel fan-out's wall-clock). Bump it for more thorough results.

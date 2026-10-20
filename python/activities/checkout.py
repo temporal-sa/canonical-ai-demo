@@ -1,13 +1,14 @@
 """External checkout steps used by ``CheckoutWorkflow``.
 
-These small Activities stand in for airline, hotel, and attraction APIs. Their
-reservation IDs are idempotent so an Activity retry cannot create a duplicate.
+These small Activities stand in for airline, hotel, and attraction APIs. The
+workflow mints each reservation ID and passes it in as the idempotency key, so
+an Activity retry returns the same reservation instead of creating a duplicate,
+and a cancel can target a booking whose outcome the workflow never heard.
 The first checkout's hotel failure is enabled by default for the live
 compensation demo; later attempts succeed. Set ``CHECKOUT_FAIL_HOTEL=false``
 to skip the injected failure entirely.
 """
 
-import hashlib
 import time
 
 from temporalio import activity
@@ -15,9 +16,9 @@ from temporalio.exceptions import ApplicationError
 
 import config
 from models.types import (
-    CheckoutRequest,
     CheckoutReservation,
     CheckoutStepRequest,
+    FinalizeRequest,
 )
 
 from . import db
@@ -30,16 +31,13 @@ def _pause() -> None:
 
 
 def _reservation(req: CheckoutStepRequest) -> CheckoutReservation:
-    # A real integration would pass this key to the provider. Deriving it from
-    # stable business identifiers gives this demo the same retry-safe behavior.
-    raw = f"{req.account_key}:{req.item.kind}:{req.item.ref_id}".encode()
-    suffix = hashlib.sha256(raw).hexdigest()[:10].upper()
-    prefix = {"flight": "FLT", "hotel": "HTL", "activity": "ACT"}[req.item.kind]
+    # A real integration sends req.reservation_id to the supplier as its
+    # idempotency key; the supplier returns the existing reservation on a retry.
     return CheckoutReservation(
         kind=req.item.kind,
         ref_id=req.item.ref_id,
         title=req.item.title,
-        reservation_id=f"{prefix}-{suffix}",
+        reservation_id=req.reservation_id,
     )
 
 
@@ -69,6 +67,8 @@ def book_activity(req: CheckoutStepRequest) -> CheckoutReservation:
 
 
 def _cancel(reservation: CheckoutReservation) -> CheckoutReservation:
+    # Cancel by reservation ID. Idempotent: cancelling twice, or cancelling a
+    # reservation the supplier never made, succeeds without doing anything.
     _pause()
     return reservation.model_copy(update={"status": "cancelled"})
 
@@ -89,10 +89,19 @@ def cancel_activity(reservation: CheckoutReservation) -> CheckoutReservation:
 
 
 @activity.defn
-def finalize_checkout(req: CheckoutRequest) -> dict:
-    """Persist the completed trip only after every reservation succeeds."""
-    items = [item.model_dump() for item in req.items]
-    already = db.items_already_booked(req.account_key, items)
+def finalize_checkout(req: FinalizeRequest) -> dict:
+    """Persist the completed trip only after every reservation succeeds.
+
+    Idempotent on checkout_id. If an earlier attempt committed and then the
+    worker died or timed out before reporting back, the retry finds that booking
+    and returns it. Without this check the retry would see the trip's own items
+    and decline them as duplicates, and the saga would cancel a trip that was
+    booked."""
+    if existing := db.booking_for_checkout(req.checkout_id):
+        return existing
+    checkout = req.checkout
+    items = [item.model_dump() for item in checkout.items]
+    already = db.items_already_booked(checkout.account_key, items)
     if already:
         names = ", ".join(f'"{item["title"]}"' for item in already)
         raise ApplicationError(
@@ -100,4 +109,11 @@ def finalize_checkout(req: CheckoutRequest) -> dict:
             type="BookingDeclined",
             non_retryable=True,
         )
-    return db.record_booking(req.account_key, items, req.summary)
+    return db.record_booking(checkout.account_key, items, checkout.summary, req.checkout_id)
+
+
+@activity.defn
+def void_booking(checkout_id: str) -> int:
+    """Compensation for finalize_checkout: remove the checkout's booking record.
+    Only runs when finalize's outcome is unknown; a no-op if nothing was written."""
+    return db.void_booking(checkout_id)

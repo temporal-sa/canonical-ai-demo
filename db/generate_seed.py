@@ -605,7 +605,10 @@ CREATE TABLE booking (
     account_key VARCHAR(120) NOT NULL,
     created_at  TIMESTAMP    NOT NULL DEFAULT now(),
     total       NUMERIC(10,2) NOT NULL,
-    summary     TEXT
+    summary     TEXT,
+    -- Idempotency key: the CheckoutWorkflow ID. A retried finalize finds its own
+    -- booking instead of inserting a second one (nullable for older workers).
+    checkout_id VARCHAR(160) UNIQUE
 );
 
 CREATE TABLE booking_line (
@@ -635,7 +638,10 @@ CREATE TABLE invoice (
     account_key    VARCHAR(120) NOT NULL,
     created_at     TIMESTAMP NOT NULL DEFAULT now(),
     amount         NUMERIC(10,2) NOT NULL,
-    flight_details TEXT
+    flight_details TEXT,
+    -- Idempotency key minted by the workflow, so a retried create_invoice
+    -- returns the same invoice (nullable for older workers).
+    idempotency_key VARCHAR(160) UNIQUE
 );
 
 CREATE INDEX idx_attraction_dest ON attraction(destination_id);
