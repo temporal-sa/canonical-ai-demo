@@ -115,6 +115,8 @@ Everything else is supporting cast:
 
 ## Quick start (local)
 
+To present the demo, follow [RUNBOOK.md](RUNBOOK.md): the walkthrough beat by beat, and where in the code each part happens.
+
 Prereqs: Docker, the [Temporal CLI](https://docs.temporal.io/cli), and
 [`uv`](https://docs.astral.sh/uv/). Put your `ANTHROPIC_API_KEY` in `.env`
 (copy `.env.example`).
