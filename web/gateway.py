@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +70,12 @@ IS_CRASHABLE = TASK_QUEUE.startswith(f"{BASE_TASK_QUEUE}-")
 def temporal_ui_base() -> str:
     if explicit := os.getenv("TEMPORAL_UI_BASE"):
         return explicit
+    # The demo platform injects the UI base (https://cloud.temporal.io, or a crashable
+    # workspace's dev server UI) and the namespace links open, without an account
+    # suffix on a dev server. This returns the namespace page app.js appends to.
+    if ui_url := os.getenv("TEMPORAL_UI_URL", "").rstrip("/"):
+        ns = os.getenv("TEMPORAL_UI_NAMESPACE") or TEMPORAL_NAMESPACE
+        return f"{ui_url}/namespaces/{quote(ns, safe='')}"
     if "tmprl.cloud" in TEMPORAL_ADDRESS:  # <ns>.<acct>.tmprl.cloud:7233
         host = TEMPORAL_ADDRESS.split(":")[0].split(".")
         ns = ".".join(host[:2]) if len(host) >= 2 else TEMPORAL_NAMESPACE
