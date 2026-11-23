@@ -58,7 +58,7 @@ Read by `config.py`. All optional except the API key.
 | `ANTHROPIC_API_KEY` | — | required (unless `LLM_PROVIDER=openai`) |
 | `LLM_PROVIDER` | `anthropic` | `anthropic` \| `openai` |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | needs a model with web search for `research_destination` |
-| `OPENAI_MODEL` | `gpt-4o` | only if `LLM_PROVIDER=openai` |
+| `OPENAI_MODEL` | `gpt-6-luna` | only if `LLM_PROVIDER=openai` |
 | `TEMPORAL_ADDRESS` / `TEMPORAL_NAMESPACE` | `localhost:7233` / `default` | Temporal Cloud via `TEMPORAL_API_KEY` or TLS cert/key |
 | `DB_URL` | `postgresql://demo:demo@localhost:5432/travel` | or discrete `DB_HOST`/`DB_USER`/… |
 | `RESEARCH_SEARCHES` | `6` | parallel searches per research pass |

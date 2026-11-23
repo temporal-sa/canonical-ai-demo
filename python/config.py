@@ -35,7 +35,7 @@ DB_URL = _db_url()
 # LLM provider
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna")
 
 # research_destination snappiness: cap how many web searches each search activity
 # may run. 1 = a single focused lookup per facet (fastest — tames the slow-outlier
