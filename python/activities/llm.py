@@ -107,7 +107,9 @@ async def _call_openai(req: LLMRequest) -> LLMResponse:
 
     try:
         resp = await client.chat.completions.create(
-            model=config.OPENAI_MODEL, messages=messages, tools=tools
+            model=config.OPENAI_MODEL, messages=messages, tools=tools,
+            # gpt-6-luna takes Chat Completions tools only with reasoning off.
+            reasoning_effort="none",
         )
     except (openai.BadRequestError, openai.AuthenticationError,
             openai.PermissionDeniedError, openai.NotFoundError) as e:

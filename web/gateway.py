@@ -134,7 +134,7 @@ class LLMStatus(BaseModel):
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 LLM_MODEL = (
-    os.getenv("OPENAI_MODEL", "gpt-4o") if LLM_PROVIDER == "openai"
+    os.getenv("OPENAI_MODEL", "gpt-6-luna") if LLM_PROVIDER == "openai"
     else os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 )
 
